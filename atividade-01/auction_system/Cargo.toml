@@ -1,0 +1,9 @@
+[package]
+name = "auction_system"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+futures-lite = "2.6.1"
+lapin = "3.2.1"
+tracing = "0.1.41"
