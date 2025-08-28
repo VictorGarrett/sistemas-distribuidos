@@ -1,73 +1,62 @@
-use futures_lite::stream::StreamExt;
 use lapin::{
-    options::*, publisher_confirm::Confirmation, types::FieldTable, BasicProperties, Connection,
-    ConnectionProperties, Result,
+    options::{BasicConsumeOptions, BasicPublishOptions, QueueDeclareOptions},
+    types::FieldTable,
+    BasicProperties, Connection, ConnectionProperties,
 };
-use tracing::info;
-fn main() -> Result<()> {
-    if std::env::var("RUST_LOG").is_err() {
-        unsafe { std::env::set_var("RUST_LOG", "info") };
-    }
+use futures_lite::stream::StreamExt;
 
-    tracing_subscriber::fmt::init();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Connect to RabbitMQ
+    let addr = "amqp://guest:guest@127.0.0.1:5672/%2f";
+    let conn = Connection::connect(addr, ConnectionProperties::default()).await?;
+    println!("Connected to RabbitMQ!");
 
-    let addr = std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://127.0.0.1:5672/%2f".into());
+    // 2. Create a channel
+    let channel = conn.create_channel().await?;
 
-    async_global_executor::block_on(async {
-        let conn = Connection::connect(
-            &addr,
-            ConnectionProperties::default(),
+    // 3. Declare a queue
+    let queue = channel
+        .queue_declare(
+            "test_queue",
+            QueueDeclareOptions::default(),
+            FieldTable::default(),
+        )
+        .await?;
+    println!("Declared queue {:?}", queue.name());
+
+    // 4. Publish a message
+    let payload = b"Hello from Rust & Lapin!";
+    channel
+        .basic_publish(
+            "",
+            "test_queue",
+            BasicPublishOptions::default(),
+            payload, // <-- changed here
+            BasicProperties::default(),
+        )
+        .await?
+        .await?; // Wait for confirmation
+    println!("Message published!");
+
+    // 5. Consume the message
+    let mut consumer = channel
+        .basic_consume(
+            "test_queue",
+            "my_consumer",
+            BasicConsumeOptions::default(),
+            FieldTable::default(),
         )
         .await?;
 
-        info!("CONNECTED");
+    println!("Waiting for messages...");
 
-        let channel_a = conn.create_channel().await?;
-        let channel_b = conn.create_channel().await?;
+    while let Some(delivery) = consumer.next().await {
+        let delivery = delivery?;
+        println!("Received: {:?}", std::str::from_utf8(&delivery.data)?);
+        delivery.ack(Default::default()).await?;
+        break; // Exit after first message
+    }
 
-        let queue = channel_a
-            .queue_declare(
-                "hello",
-                QueueDeclareOptions::default(),
-                FieldTable::default(),
-            )
-            .await?;
-
-        info!(?queue, "Declared queue");
-
-        let mut consumer = channel_b
-            .basic_consume(
-                "hello",
-                "my_consumer",
-                BasicConsumeOptions::default(),
-                FieldTable::default(),
-            )
-            .await?;
-        async_global_executor::spawn(async move {
-            info!("will consume");
-            while let Some(delivery) = consumer.next().await {
-                let delivery = delivery.expect("error in consumer");
-                delivery
-                    .ack(BasicAckOptions::default())
-                    .await
-                    .expect("ack");
-            }
-        }).detach();
-
-        let payload = b"Hello world!";
-
-        loop {
-            let confirm = channel_a
-                .basic_publish(
-                    "",
-                    "hello",
-                    BasicPublishOptions::default(),
-                    payload,
-                    BasicProperties::default(),
-                )
-                .await?
-                .await?;
-            assert_eq!(confirm, Confirmation::NotRequested);
-        }
-    })
+    Ok(())
 }
