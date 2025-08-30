@@ -244,6 +244,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "auction-client"
+version = "0.1.0"
+dependencies = [
+ "futures-lite",
+ "lapin",
+ "tokio",
+]
+
+[[package]]
+name = "auction-srv"
+version = "0.1.0"
+dependencies = [
+ "futures-lite",
+ "lapin",
+ "tokio",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -304,6 +322,15 @@ name = "base64ct"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55248b47b0caf0546f7988906588779981c43bb1bc9d0c44087278f80cdb44ba"
+
+[[package]]
+name = "bid-srv"
+version = "0.1.0"
+dependencies = [
+ "futures-lite",
+ "lapin",
+ "tokio",
+]
 
 [[package]]
 name = "bindgen"
@@ -1115,6 +1142,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "notification-srv"
+version = "0.1.0"
+dependencies = [
+ "futures-lite",
+ "lapin",
+ "tokio",
 ]
 
 [[package]]
