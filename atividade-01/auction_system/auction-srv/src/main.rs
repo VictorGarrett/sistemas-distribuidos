@@ -17,19 +17,24 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let channel = conn.create_channel().await?;
 
-    let queues = [
-        "leilao_iniciado",
-        "leilao_finalizado"
-    ];
 
-    for &queue in queues.iter(){
-        channel.queue_declare(
-            queue, 
-            QueueDeclareOptions::default(), 
-            FieldTable::default()
+    channel
+        .exchange_declare(
+            "leilao_iniciado",           // exchange name
+            lapin::ExchangeKind::Fanout,
+            ExchangeDeclareOptions::default(),
+            FieldTable::default(),
         )
-        .await?;
-    }
+        .await
+        .expect("declare exchange");
+
+    channel.queue_declare(
+        leilao_finalizado, 
+        QueueDeclareOptions::default(), 
+        FieldTable::default()
+    )
+    .await?;
+
     
     let auctions = get_auctions();
     let mut auctions_ref: Vec<(&Auction, u128)>  = Vec::with_capacity(2 * auctions.len());
@@ -47,20 +52,29 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-        let queue = if now > auction.end_timestamp { 
-            "leilao_finalizado" 
-        } else { 
-            "leilao_iniciado" 
+        if now > auction.end_timestamp {
+            // publish to simple queue, this message goes to bid-srv only 
+            channel.basic_publish(
+                "", 
+                "leilao_finalizado", 
+                lapin::options::BasicPublishOptions::default(), 
+                auction.id.to_ne_bytes().as_ref(), 
+                lapin::BasicProperties::default()
+            ).await?.await?;
+        println!("Published to {}: {}", queue, auction.id); 
+        } else {
+            // publish to fanout exchange, this message goes to all clients 
+            channel.basic_publish(
+                "leilao_iniciado", 
+                "", 
+                lapin::options::BasicPublishOptions::default(), 
+                auction.id.to_ne_bytes().as_ref(), 
+                lapin::BasicProperties::default()
+            ).await?.await?;
+        println!("Published to {}: {}", queue, auction.id);
         };
 
-        channel.basic_publish(
-            "", 
-            queue, 
-            lapin::options::BasicPublishOptions::default(), 
-            auction.id.to_ne_bytes().as_ref(), 
-            lapin::BasicProperties::default()
-        ).await?.await?;
-        println!("Published to {}: {}", queue, auction.id);
+        
     }
 
     Ok(())
