@@ -10,7 +10,10 @@ use base64::{engine::general_purpose, Engine as _};
 use serde_json::Value;
 use rsa::Pkcs1v15Sign;
 
-use crate::bid::Bid;
+pub mod models;
+pub mod tasks;
+use crate::models::*;
+use crate::tasks::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
