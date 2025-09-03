@@ -1,14 +1,30 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use lapin::{options::{BasicConsumeOptions, BasicPublishOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions}, protocol::{channel, queue}, types::FieldTable, Channel, Connection, Queue};
+use lapin::{
+    options::{
+        BasicConsumeOptions, 
+        BasicPublishOptions, 
+        ExchangeDeclareOptions, 
+        QueueBindOptions, 
+        QueueDeclareOptions
+    }, 
+    types::FieldTable, 
+    Channel, 
+    Connection
+};
 use futures_lite::stream::StreamExt;
-use rsa::{pkcs8::DecodePublicKey, RsaPublicKey, Pkcs1v15Sign};
+use rsa::{
+    pkcs8::DecodePublicKey, 
+    RsaPublicKey, 
+    Pkcs1v15Sign
+};
 use sha2::{Digest, Sha256};
 
 use serde_json;
 
 use crate::models::*;
 
+/*==================================================== TASKS  ====================================================*/
 
 pub async fn task_end_auction(
     auctions: Arc<Mutex<Vec<Auction>>>,
@@ -117,74 +133,12 @@ pub async fn task_init_auction(
     }
 }
 
+/*==================================================== TASKS - END ====================================================*/
 
-/*============================================ AUX ==================================================== */
 
-fn is_bid_valid(
-    bid: &Bid,
-    auctions: &Arc<Mutex<Vec<Auction>>>,
-    bids: &Arc<Mutex<Vec<Bid>>>,
-    public_key: RsaPublicKey
-) -> bool {
-    let auctions = auctions.blocking_lock();
-    let auction_opt = auctions.iter().find(|a| a.id == bid.auction_id && a.is_active);
+/*====================================================== AUX ====================================================== */
 
-    //Auction has ended or does not exist
-    if auction_opt.is_none() {
-        return false;
-    }
-
-    let bids = bids.blocking_lock();
-    let highest_bid_opt = bids
-        .iter()
-        .filter(|b| b.auction_id == bid.auction_id)
-        .max_by(|a, b| a.value.partial_cmp(&b.value)
-        .unwrap());
-
-    if let Some(highest_bid) = highest_bid_opt {
-        if bid.value <= highest_bid.value {
-            return false;
-        }
-    }
-    verify_bid(bid, public_key)
-}
-
-fn verify_bid(bid: &Bid, public_key: RsaPublicKey) -> bool {
-    let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes();
-    let hashed = Sha256::digest(content);
-
-    public_key.verify(Pkcs1v15Sign::new_unprefixed(), &hashed, bid.signature.as_bytes()).is_ok()
-}
-
-async fn publish_validated_bid(channel: &Channel, bid: &Bid) -> Result<(), Box<dyn std::error::Error>> {
-    let payload = serde_json::to_vec(bid)?;
-    channel
-        .basic_publish(
-            "",
-            "lance_realizado",
-            BasicPublishOptions::default(),
-            &payload,
-            lapin::BasicProperties::default(),
-        )
-        .await?
-        .await?;
-    Ok(())
-}
-
-async fn publish_winner_bid(channel: &Channel, bid: &Bid) -> Result<(), Box<dyn std::error::Error>> {
-    let payload = serde_json::to_vec(bid)?;
-    channel
-        .basic_publish(
-            "",
-            "leilao_vencedor",
-            BasicPublishOptions::default(),
-            &payload,
-            lapin::BasicProperties::default(),
-        )
-        .await?
-        .await?;
-    Ok(())
-}   
+/*============================================= SETUP ============================================= */
 
 async fn task_validate_bid_setup(conn: Arc<Connection>) -> Result<Channel, Box<dyn std::error::Error>>{
     let channel = conn.create_channel().await?;
@@ -269,3 +223,86 @@ async fn task_end_auction_setup(conn: Arc<Connection>) -> Result<Channel, Box<dy
 
     Ok(channel)
 }
+
+/*============================================= SETUP - END ============================================= */
+
+/*============================================= PUBLISH ============================================= */
+
+
+async fn publish_validated_bid(
+    channel: &Channel, 
+    bid: &Bid
+) -> Result<(), Box<dyn std::error::Error>> {
+    let payload = serde_json::to_vec(bid)?;
+    channel
+        .basic_publish(
+            "",
+            "lance_realizado",
+            BasicPublishOptions::default(),
+            &payload,
+            lapin::BasicProperties::default(),
+        )
+        .await?
+        .await?;
+    Ok(())
+}
+
+async fn publish_winner_bid(
+    channel: &Channel, 
+    bid: &Bid
+) -> Result<(), Box<dyn std::error::Error>> {
+    let payload = serde_json::to_vec(bid)?;
+    channel
+        .basic_publish(
+            "",
+            "leilao_vencedor",
+            BasicPublishOptions::default(),
+            &payload,
+            lapin::BasicProperties::default(),
+        )
+        .await?
+        .await?;
+    Ok(())
+}  
+
+/*============================================= PUBLISH - END ============================================= */
+
+/*============================================= BID VERIFICATION ============================================= */
+
+fn is_bid_valid(
+    bid: &Bid,
+    auctions: &Arc<Mutex<Vec<Auction>>>,
+    bids: &Arc<Mutex<Vec<Bid>>>,
+    public_key: RsaPublicKey
+) -> bool {
+    let auctions = auctions.blocking_lock();
+    let auction_opt = auctions.iter().find(|a| a.id == bid.auction_id && a.is_active);
+
+    //Auction has ended or does not exist
+    if auction_opt.is_none() {
+        return false;
+    }
+
+    let bids = bids.blocking_lock();
+    let highest_bid_opt = bids
+        .iter()
+        .filter(|b| b.auction_id == bid.auction_id)
+        .max_by(|a, b| a.value.partial_cmp(&b.value)
+        .unwrap());
+
+    if let Some(highest_bid) = highest_bid_opt {
+        if bid.value <= highest_bid.value {
+            return false;
+        }
+    }
+    verify_bid(bid, public_key)
+}
+
+fn verify_bid(bid: &Bid, public_key: RsaPublicKey) -> bool {
+    let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes();
+    let hashed = Sha256::digest(content);
+
+    public_key.verify(Pkcs1v15Sign::new_unprefixed(), &hashed, bid.signature.as_bytes()).is_ok()
+}
+
+/*============================================= BID VERIFICATION - END ============================================= */
