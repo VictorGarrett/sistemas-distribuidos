@@ -1,6 +1,7 @@
 use lapin::{
-    Connection, ConnectionProperties,
+    Channel, Connection, ConnectionProperties
 };
+use rsa::rand_core::le;
 use std::sync::Arc;
 use tokio::{sync::Mutex, task::JoinHandle};
 use lapin::options::{QueueDeclareOptions, QueueBindOptions, ExchangeDeclareOptions};
@@ -80,6 +81,34 @@ fn init_tasks(
 async fn init_rabbitmq_structs(conn: Arc<Connection>) -> Result<String, Box<dyn std::error::Error>> {
     let channel = conn.create_channel().await?;
 
+    let fo_queue = init_leilao_iniciado(&channel).await?;
+    init_lance_realizado(&channel).await?;
+    init_leilao_vencedor(&channel).await?;
+    init_leilao_finalizado(&channel).await?;
+
+    Ok(fo_queue)
+}
+
+async fn init_leilao_vencedor(channel: &Channel) -> Result<(), Box<dyn std::error::Error>>{
+    let _leilao_vencedor_mq = channel.queue_declare(
+        "leilao_vencedor",
+        QueueDeclareOptions::default(), 
+        FieldTable::default(),
+    ).await?;
+
+    channel.queue_bind(
+        "leilao_vencedor",
+        "",
+        "",
+        QueueBindOptions::default(), 
+        FieldTable::default()
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn init_lance_realizado(channel: &Channel) -> Result<(), Box<dyn std::error::Error>>{
     channel.exchange_declare(
         "lance_realizado", 
         lapin::ExchangeKind::Topic, 
@@ -103,6 +132,10 @@ async fn init_rabbitmq_structs(conn: Arc<Connection>) -> Result<String, Box<dyn 
     )
     .await?;
 
+    Ok(())
+}
+
+async fn init_leilao_iniciado(channel: &Channel) -> Result<String, Box<dyn std::error::Error>>{
     let fo_queue = channel.queue_declare(
         "", 
         QueueDeclareOptions::default(), 
@@ -119,6 +152,10 @@ async fn init_rabbitmq_structs(conn: Arc<Connection>) -> Result<String, Box<dyn 
     )
     .await?;
 
+    Ok(fo_queue.name().to_string())
+}
+
+async fn init_leilao_finalizado(channel: &Channel) -> Result<(), Box<dyn std::error::Error>>{
     let _leilao_finalizado_mq = channel.queue_declare(
         "leilao_finalizado",
         QueueDeclareOptions::default(), 
@@ -134,20 +171,5 @@ async fn init_rabbitmq_structs(conn: Arc<Connection>) -> Result<String, Box<dyn 
     )
     .await?;
 
-    let _leilao_vencedor_mq = channel.queue_declare(
-        "leilao_vencedor",
-        QueueDeclareOptions::default(), 
-        FieldTable::default(),
-    ).await?;
-
-    channel.queue_bind(
-        "leilao_vencedor",
-        "",
-        "",
-        QueueBindOptions::default(), 
-        FieldTable::default()
-    )
-    .await?;
-
-    Ok(fo_queue.name().to_string())
+    Ok(())
 }
