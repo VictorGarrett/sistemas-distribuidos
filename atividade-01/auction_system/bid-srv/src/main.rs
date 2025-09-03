@@ -1,62 +1,62 @@
 use lapin::{
-    options::{BasicConsumeOptions, QueueDeclareOptions},
-    types::FieldTable,
     Connection, ConnectionProperties,
 };
-use futures_lite::stream::StreamExt;
-use rsa::{pkcs8::DecodePublicKey, traits::{PaddingScheme, SignatureScheme}, RsaPublicKey};
-use sha2::{Digest, Sha256};
-use base64::{engine::general_purpose, Engine as _};
-use serde_json::Value;
-use rsa::Pkcs1v15Sign;
+use std::sync::Arc;
+use tokio::{sync::Mutex, task::JoinHandle};
 
-use crate::bid::Bid;
+pub mod models;
+pub mod tasks;
+use crate::models::*;
+use crate::tasks::{
+    task_validate_bid,
+    task_end_auction,
+    task_init_auction
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "amqp://guest:guest@127.0.0.1:5672/%2f";
     let conn = Connection::connect(addr, ConnectionProperties::default()).await?;
     println!("Consumer connected to RabbitMQ!");
+    let conn = Arc::new(conn);
 
-    let channel = conn.create_channel().await?;
+    let auctions: Vec<Auction> = Vec::new();
+    let bids: Vec<Bid> = Vec::new();
+    let auctions = Arc::new(Mutex::new(auctions));
+    let bids = Arc::new(Mutex::new(bids));
 
-    channel
-        .queue_declare(
-            "lance_realizado",
-            QueueDeclareOptions::default(),
-            FieldTable::default(),
-        )
-        .await?;
+    let handles = init_tasks(auctions, bids, conn);
 
-    let mut consumer = channel
-        .basic_consume(
-            "lance_realizado",
-            "bid-srv",
-            BasicConsumeOptions::default(),
-            FieldTable::default(),
-        )
-        .await?;
-
-    println!("Waiting for messages...");
-
-    while let Some(delivery) = consumer.next().await {
-        let delivery = delivery?;
-        println!("Received: {:?}", std::str::from_utf8(&delivery.data)?);
-        delivery.ack(Default::default()).await?;
+    for handle in handles {
+        handle.await?;
     }
 
     Ok(())
 }
 
-fn verify_bid(bid: &Bid, public_key: RsaPublicKey) -> bool {
+fn init_tasks(
+    auctions: Arc<Mutex<Vec<Auction>>>,
+    bids: Arc<Mutex<Vec<Bid>>>,
+    conn: Arc<Connection>,
+) -> Vec<JoinHandle<()>> {
+    let mut handles = Vec::new();
 
+    handles.push(tokio::spawn(task_validate_bid(
+        auctions.clone(),
+        bids.clone(),
+        conn.clone(),
+    )));
 
-    let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes();
-    
-    let hashed = Sha256::digest(content);
+    handles.push(tokio::spawn(task_end_auction(
+        auctions.clone(),
+        bids.clone(),
+        conn.clone(),
+    )));
 
-    match public_key.verify(Pkcs1v15Sign::new_unprefixed(), &hashed, &signature) {
-        Ok(_) => return true,
-        Err(e) => return false,
-    }
+    handles.push(tokio::spawn(task_init_auction(
+        auctions.clone(),
+        conn.clone(),
+    )));
+
+    handles
 }
