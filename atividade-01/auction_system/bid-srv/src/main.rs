@@ -52,13 +52,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn verify_bid(bid: &Bid, public_key: RsaPublicKey) -> bool {
-
-
-    let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes();
-    
+    let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes(); 
     let hashed = Sha256::digest(content);
-
-    match public_key.verify(Pkcs1v15Sign::new_unprefixed(), &hashed, &signature) {
+    match public_key.verify(Pkcs1v15Sign::new_unprefixed(), &hashed, bid.signature.as_bytes()) {
         Ok(_) => return true,
         Err(e) => return false,
     }

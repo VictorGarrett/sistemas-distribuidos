@@ -146,19 +146,14 @@ fn is_bid_valid(
             return false;
         }
     }
-    true
+    verify_bid(bid, public_key)
 }
 
 fn verify_bid(bid: &Bid, public_key: RsaPublicKey) -> bool {
-
     let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes();
-    
     let hashed = Sha256::digest(content);
 
-    match public_key.verify(Pkcs1v15Sign::new_unprefixed(), &hashed, &signature) {
-        Ok(_) => return true,
-        Err(e) => return false,
-    }
+    public_key.verify(Pkcs1v15Sign::new_unprefixed(), &hashed, bid.signature.as_bytes()).is_ok()
 }
 
 async fn publish_validated_bid(channel: &Channel, bid: &Bid) -> Result<(), Box<dyn std::error::Error>> {
@@ -242,7 +237,7 @@ async fn task_init_auction_setup(conn: Arc<Connection>) -> Result<(Channel, Stri
 
 async fn task_end_auction_setup(conn: Arc<Connection>) -> Result<Channel, Box<dyn std::error::Error>>{
     let channel = conn.create_channel().await?;
-    let leilao_finalizado_mq = channel.queue_declare(
+    let _leilao_finalizado_mq = channel.queue_declare(
         "leilao_finalizado",
         QueueDeclareOptions::default(), 
         FieldTable::default(),
@@ -257,7 +252,7 @@ async fn task_end_auction_setup(conn: Arc<Connection>) -> Result<Channel, Box<dy
     )
     .await?;
 
-    let leilao_vencedor_mq = channel.queue_declare(
+    let _leilao_vencedor_mq = channel.queue_declare(
         "leilao_vencedor",
         QueueDeclareOptions::default(), 
         FieldTable::default(),
