@@ -4,13 +4,8 @@ use lapin::{
     options::{
         BasicConsumeOptions, 
         BasicPublishOptions, 
-        ExchangeDeclareOptions, 
-        QueueBindOptions, 
-        QueueDeclareOptions
     }, 
-    types::FieldTable, 
-    Channel, 
-    Connection
+    types::FieldTable, Channel, Connection
 };
 use futures_lite::stream::StreamExt;
 use rsa::{
@@ -31,7 +26,7 @@ pub async fn task_end_auction(
     bids: Arc<Mutex<Vec<Bid>>>,
     conn: Arc<Connection>,
 ) {
-    let channel = task_end_auction_setup(conn.clone()).await.unwrap();
+    let channel = conn.create_channel().await.unwrap();
 
     let mut consumer = channel.basic_consume(
         "leilao_finalizado", 
@@ -71,7 +66,7 @@ pub async fn task_validate_bid(
     conn: Arc<Connection>,
 ) {
 
-    let channel = task_validate_bid_setup(conn.clone()).await.unwrap();
+    let channel = conn.create_channel().await.unwrap();
 
     let mut consumer = channel.basic_consume(
         "lance_realizado_bid-srv", 
@@ -109,10 +104,11 @@ pub async fn task_validate_bid(
 pub async fn task_init_auction(
     auctions: Arc<Mutex<Vec<Auction>>>,
     conn: Arc<Connection>,
+    fo_queue_name: String,
 ){
-    let (channel, queue_name) = task_init_auction_setup(conn.clone()).await.unwrap();
+    let channel = conn.create_channel().await.unwrap();
     let mut consumer = channel.basic_consume(
-            queue_name.as_str(), 
+            fo_queue_name.as_str(), 
             "bid-srv",
             BasicConsumeOptions::default(), 
             FieldTable::default()
@@ -137,94 +133,6 @@ pub async fn task_init_auction(
 
 
 /*====================================================== AUX ====================================================== */
-
-/*============================================= SETUP ============================================= */
-
-async fn task_validate_bid_setup(conn: Arc<Connection>) -> Result<Channel, Box<dyn std::error::Error>>{
-    let channel = conn.create_channel().await?;
-    channel.queue_declare(
-        "lance_realizado_bid-srv",
-        QueueDeclareOptions::default(), 
-        FieldTable::default(),
-    ).await?;
-
-    channel.queue_bind(
-        "lance_realizado_bid-srv",
-        "leilao_realizado", 
-        "",
-        QueueBindOptions::default(), 
-        FieldTable::default()
-    )
-    .await?;
-
-    channel.exchange_declare(
-        "lance_realizado", 
-        lapin::ExchangeKind::Topic, 
-        ExchangeDeclareOptions::default(),
-        FieldTable::default()
-    )
-    .await?;
-
-    Ok(channel)
-}
-
-async fn task_init_auction_setup(conn: Arc<Connection>) -> Result<(Channel, String), Box<dyn std::error::Error>>{
-    let channel = conn.create_channel().await?;
-    let fo_queue = channel.queue_declare(
-        "", 
-        QueueDeclareOptions::default(), 
-        FieldTable::default(),
-    )
-    .await?;
-
-    channel.queue_bind(
-        fo_queue.name().as_str(), 
-        "leilao_iniciado", 
-        "", 
-        QueueBindOptions::default(), 
-        FieldTable::default()
-    )
-    .await?;
-
-    Ok((channel, fo_queue.name().to_string()))
-}
-
-async fn task_end_auction_setup(conn: Arc<Connection>) -> Result<Channel, Box<dyn std::error::Error>>{
-    let channel = conn.create_channel().await?;
-    let _leilao_finalizado_mq = channel.queue_declare(
-        "leilao_finalizado",
-        QueueDeclareOptions::default(), 
-        FieldTable::default(),
-    ).await?;
-
-    channel.queue_bind(
-        "leilao_finalizado",
-        "",
-        "",
-        QueueBindOptions::default(), 
-        FieldTable::default()
-    )
-    .await?;
-
-    let _leilao_vencedor_mq = channel.queue_declare(
-        "leilao_vencedor",
-        QueueDeclareOptions::default(), 
-        FieldTable::default(),
-    ).await?;
-
-    channel.queue_bind(
-        "leilao_vencedor",
-        "",
-        "",
-        QueueBindOptions::default(), 
-        FieldTable::default()
-    )
-    .await?;
-
-    Ok(channel)
-}
-
-/*============================================= SETUP - END ============================================= */
 
 /*============================================= PUBLISH ============================================= */
 
