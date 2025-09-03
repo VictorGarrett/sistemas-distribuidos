@@ -96,7 +96,7 @@ async fn init_rabbitmq_structs(conn: Arc<Connection>) -> Result<String, Box<dyn 
 
     channel.queue_bind(
         "lance_realizado_bid-srv",
-        "leilao_realizado", 
+        "lance_realizado", 
         "",
         QueueBindOptions::default(), 
         FieldTable::default()
