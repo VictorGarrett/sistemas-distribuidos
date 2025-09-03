@@ -1,8 +1,9 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use lapin::{options::{BasicConsumeOptions, BasicPublishOptions, ExchangeBindOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions}, protocol::queue, types::FieldTable, Channel, Connection};
+use lapin::{options::{BasicConsumeOptions, BasicPublishOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions}, protocol::{channel, queue}, types::FieldTable, Channel, Connection, Queue};
 use futures_lite::stream::StreamExt;
-use rsa::{pkcs8::DecodePublicKey, RsaPublicKey};
+use rsa::{pkcs8::DecodePublicKey, RsaPublicKey, Pkcs1v15Sign};
+use sha2::{Digest, Sha256};
 
 use serde_json;
 
@@ -14,7 +15,38 @@ pub async fn task_end_auction(
     bids: Arc<Mutex<Vec<Bid>>>,
     conn: Arc<Connection>,
 ) {
+    let channel = task_end_auction_setup(conn.clone()).await.unwrap();
 
+    let mut consumer = channel.basic_consume(
+        "leilao_finalizado", 
+        "bid-srv", 
+        BasicConsumeOptions::default(), 
+        FieldTable::default()
+    ).await.unwrap();
+
+    while let Some(delivery) = consumer.next().await {
+        let delivery = delivery.unwrap();
+        delivery.ack(Default::default()).await.unwrap();
+
+        let auction_id = u32::from_ne_bytes(delivery.data.as_slice().try_into().unwrap());
+        let mut auctions = auctions.lock().await;
+        if let Some(auction) = auctions.iter_mut().find(|a| a.id == auction_id){
+            auction.is_active = false;
+        }
+        drop(auctions); //ensures lock is released before next iteration
+
+        //If there is a bid for this auction, publish the winner bid
+        let bids = bids.lock().await;
+        if let Some(winning_bid) = bids
+            .iter()
+            .filter(|a| a.auction_id == auction_id)
+            .max_by(|a, b| a.value.partial_cmp(&b.value).unwrap())
+        {
+            publish_winner_bid(&channel, winning_bid).await.unwrap();
+        }
+        drop(bids); //ensures lock is released before next iteration
+            
+    }
 }
 
 pub async fn task_validate_bid(
@@ -144,6 +176,21 @@ async fn publish_validated_bid(channel: &Channel, bid: &Bid) -> Result<(), Box<d
     Ok(())
 }
 
+async fn publish_winner_bid(channel: &Channel, bid: &Bid) -> Result<(), Box<dyn std::error::Error>> {
+    let payload = serde_json::to_vec(bid)?;
+    channel
+        .basic_publish(
+            "",
+            "leilao_vencedor",
+            BasicPublishOptions::default(),
+            &payload,
+            lapin::BasicProperties::default(),
+        )
+        .await?
+        .await?;
+    Ok(())
+}   
+
 async fn task_validate_bid_setup(conn: Arc<Connection>) -> Result<Channel, Box<dyn std::error::Error>>{
     let channel = conn.create_channel().await?;
     channel.queue_declare(
@@ -191,4 +238,39 @@ async fn task_init_auction_setup(conn: Arc<Connection>) -> Result<(Channel, Stri
     .await?;
 
     Ok((channel, fo_queue.name().to_string()))
+}
+
+async fn task_end_auction_setup(conn: Arc<Connection>) -> Result<Channel, Box<dyn std::error::Error>>{
+    let channel = conn.create_channel().await?;
+    let leilao_finalizado_mq = channel.queue_declare(
+        "leilao_finalizado",
+        QueueDeclareOptions::default(), 
+        FieldTable::default(),
+    ).await?;
+
+    channel.queue_bind(
+        "leilao_finalizado",
+        "",
+        "",
+        QueueBindOptions::default(), 
+        FieldTable::default()
+    )
+    .await?;
+
+    let leilao_vencedor_mq = channel.queue_declare(
+        "leilao_vencedor",
+        QueueDeclareOptions::default(), 
+        FieldTable::default(),
+    ).await?;
+
+    channel.queue_bind(
+        "leilao_vencedor",
+        "",
+        "",
+        QueueBindOptions::default(), 
+        FieldTable::default()
+    )
+    .await?;
+
+    Ok(channel)
 }
