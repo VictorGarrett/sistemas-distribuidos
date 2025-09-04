@@ -110,23 +110,15 @@ async fn init_leilao_vencedor(channel: &Channel) -> Result<(), Box<dyn std::erro
 }
 
 async fn init_lance_realizado(channel: &Channel) -> Result<(), Box<dyn std::error::Error>>{
-    channel.exchange_declare(
-        "lance_realizado", 
-        lapin::ExchangeKind::Topic, 
-        ExchangeDeclareOptions::default(),
-        FieldTable::default()
-    )
-    .await?;
-
     channel.queue_declare(
-        "lance_realizado_bid-srv",
+        "lance_realizado",
         QueueDeclareOptions::default(), 
         FieldTable::default(),
     ).await?;
 
     channel.queue_bind(
-        "lance_realizado_bid-srv",
-        "lance_realizado", 
+        "lance_realizado",
+        "", 
         "",
         QueueBindOptions::default(), 
         FieldTable::default()

@@ -69,7 +69,7 @@ pub async fn task_validate_bid(
     let channel = conn.create_channel().await.unwrap();
 
     let mut consumer = channel.basic_consume(
-        "lance_realizado_bid-srv", 
+        "lance_realizado", 
         "bid-srv", 
         BasicConsumeOptions::default(), 
         FieldTable::default()
