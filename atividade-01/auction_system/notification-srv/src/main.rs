@@ -1,5 +1,11 @@
 use lapin::{
-    options::{BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions}, types::FieldTable, Channel, Connect, Connection, ConnectionProperties
+    options::{
+        ExchangeDeclareOptions,
+        QueueDeclareOptions}, 
+        types::FieldTable, 
+        Channel,
+        Connection, 
+        ConnectionProperties
 };
 
 use tokio::task::JoinHandle;
