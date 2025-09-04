@@ -31,7 +31,29 @@ pub async fn task_notify_bid(conn: Arc<Connection>){
 }
 
 pub async fn task_notify_winner(conn: Arc<Connection>){
-    
+    let channel = conn.create_channel().await.unwrap();
+
+    let mut consumer = channel.basic_consume(
+        "leilao_vencedor", 
+        "notification-srv",
+        BasicConsumeOptions::default(), 
+        FieldTable::default()
+    ).await.unwrap();
+
+    while let Some(delivery) = consumer.next().await{
+        let delivery = delivery.unwrap();
+        delivery.ack(BasicAckOptions::default()).await.unwrap();
+
+        let bid: Bid = serde_json::from_slice(&delivery.data).unwrap();
+
+        publish_to_notification_exc(
+            &channel, 
+            &bid, 
+            NotificationType::AuctionWinner
+        ).await.unwrap();
+
+
+    }
 }
 
 /*====================================================== AUX ====================================================== */
@@ -52,7 +74,7 @@ async fn publish_to_notification_exc(channel: &Channel, bid: &Bid, notification_
         BasicPublishOptions::default(), 
         &payload, 
         BasicProperties::default()
-    ).await?;
+    ).await?.await?;
 
     Ok(())
 }
