@@ -40,6 +40,7 @@ pub async fn task_end_auction(
         delivery.ack(Default::default()).await.unwrap();
 
         let auction_id = u32::from_ne_bytes(delivery.data.as_slice().try_into().unwrap());
+        println!("Received delivery on leilao_finalizado: {auction_id}");
         let mut auctions = auctions.lock().await;
         if let Some(auction) = auctions.iter_mut().find(|a| a.id == auction_id){
             auction.is_active = false;
@@ -55,6 +56,9 @@ pub async fn task_end_auction(
         {
             publish_winner_bid(&channel, winning_bid).await.unwrap();
         }
+        else{
+            println!("No bid found for auction {auction_id}");
+        }
         drop(bids); //ensures lock is released before next iteration
             
     }
@@ -69,7 +73,7 @@ pub async fn task_validate_bid(
     let channel = conn.create_channel().await.unwrap();
 
     let mut consumer = channel.basic_consume(
-        "lance_realizado_bid-srv", 
+        "lance_realizado", 
         "bid-srv", 
         BasicConsumeOptions::default(), 
         FieldTable::default()
@@ -80,8 +84,10 @@ pub async fn task_validate_bid(
         delivery.ack(Default::default()).await.unwrap();
 
         let bid: Bid = serde_json::from_slice(&delivery.data).unwrap();
+        println!("Received delivery on lance_realizado");
+        dbg!(&bid);
+
         let public_key = RsaPublicKey::from_public_key_pem(bid.public_key.as_str()).unwrap();
-        
         let bid_is_valid = is_bid_valid(
             &bid,
             &auctions,
@@ -121,6 +127,8 @@ pub async fn task_init_auction(
         delivery.ack(Default::default()).await.unwrap();
 
         let auction_id = u32::from_ne_bytes(delivery.data.as_slice().try_into().unwrap());
+        println!("Received delivery on leilao_iniciado: {auction_id}");
+
         let mut auctions = auctions.lock().await;
         
         let new_auction = Auction::new(auction_id, "something".to_string());
@@ -152,6 +160,9 @@ async fn publish_validated_bid(
         )
         .await?
         .await?;
+    println!("Published Validated bid on lance_realizado");
+    dbg!(bid);
+
     Ok(())
 }
 
@@ -170,6 +181,10 @@ async fn publish_winner_bid(
         )
         .await?
         .await?;
+
+    println!("Published Winner bid on leilao_vencedor");
+    dbg!(bid);
+
     Ok(())
 }  
 

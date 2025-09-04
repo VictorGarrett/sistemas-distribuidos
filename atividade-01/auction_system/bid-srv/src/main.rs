@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tokio::{sync::Mutex, task::JoinHandle};
 use lapin::options::{QueueDeclareOptions, QueueBindOptions, ExchangeDeclareOptions};
 use lapin::types::FieldTable;
+use lapin::ExchangeKind;
 
 
 pub mod models;
@@ -97,46 +98,27 @@ async fn init_leilao_vencedor(channel: &Channel) -> Result<(), Box<dyn std::erro
         FieldTable::default(),
     ).await?;
 
-    channel.queue_bind(
-        "leilao_vencedor",
-        "",
-        "",
-        QueueBindOptions::default(), 
-        FieldTable::default()
-    )
-    .await?;
-
     Ok(())
 }
 
 async fn init_lance_realizado(channel: &Channel) -> Result<(), Box<dyn std::error::Error>>{
-    channel.exchange_declare(
-        "lance_realizado", 
-        lapin::ExchangeKind::Topic, 
-        ExchangeDeclareOptions::default(),
-        FieldTable::default()
-    )
-    .await?;
-
     channel.queue_declare(
-        "lance_realizado_bid-srv",
+        "lance_realizado",
         QueueDeclareOptions::default(), 
         FieldTable::default(),
     ).await?;
-
-    channel.queue_bind(
-        "lance_realizado_bid-srv",
-        "lance_realizado", 
-        "",
-        QueueBindOptions::default(), 
-        FieldTable::default()
-    )
-    .await?;
 
     Ok(())
 }
 
 async fn init_leilao_iniciado(channel: &Channel) -> Result<String, Box<dyn std::error::Error>>{
+    channel.exchange_declare(
+        "leilao_iniciado", 
+        ExchangeKind::Fanout, 
+        ExchangeDeclareOptions::default(), 
+        FieldTable::default()
+    ).await?;
+
     let fo_queue = channel.queue_declare(
         "", 
         QueueDeclareOptions::default(), 
@@ -162,15 +144,6 @@ async fn init_leilao_finalizado(channel: &Channel) -> Result<(), Box<dyn std::er
         QueueDeclareOptions::default(), 
         FieldTable::default(),
     ).await?;
-
-    channel.queue_bind(
-        "leilao_finalizado",
-        "",
-        "",
-        QueueBindOptions::default(), 
-        FieldTable::default()
-    )
-    .await?;
 
     Ok(())
 }

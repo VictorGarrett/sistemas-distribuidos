@@ -1,5 +1,5 @@
 use lapin::{
-    options::{QueueDeclareOptions}, types::FieldTable, Connection, ConnectionProperties
+    options::{ExchangeDeclareOptions, QueueDeclareOptions}, types::FieldTable, Connection, ConnectionProperties
 };
 use tokio::runtime::Runtime;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -29,7 +29,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .expect("declare exchange");
 
     channel.queue_declare(
-        leilao_finalizado, 
+        "leilao_finalizado", 
         QueueDeclareOptions::default(), 
         FieldTable::default()
     )
@@ -61,7 +61,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 auction.id.to_ne_bytes().as_ref(), 
                 lapin::BasicProperties::default()
             ).await?.await?;
-        println!("Published to {}: {}", queue, auction.id); 
+            println!("Published to {}: {}", "leilao_finalizado", auction.id); 
         } else {
             // publish to fanout exchange, this message goes to all clients 
             channel.basic_publish(
@@ -71,7 +71,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 auction.id.to_ne_bytes().as_ref(), 
                 lapin::BasicProperties::default()
             ).await?.await?;
-        println!("Published to {}: {}", queue, auction.id);
+        println!("Published to {}: {}", "leilao_iniciado", auction.id);
         };
 
         
@@ -88,13 +88,13 @@ fn get_auctions() -> Vec<Auction> {
             1, 
             "1L de água de poça".to_string(), 
             now,
-            now + 15 * 60 * 1000,        
+            now + 3 * 60 * 1000,        
         ),
         Auction::new(
             2, 
             "bituca de cigarro".to_string(), 
-            now + 60 * 1000,
-            now + 20 * 60 * 1000,
+            now + 60 *1000,
+            now + 6 * 60 * 1000,
         ),
     ]
 }
