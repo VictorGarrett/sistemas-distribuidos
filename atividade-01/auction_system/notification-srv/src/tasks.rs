@@ -2,7 +2,7 @@ use futures_lite::StreamExt;
 use lapin::{options::{BasicAckOptions, BasicConsumeOptions, BasicPublishOptions}, types::FieldTable, BasicProperties, Channel, Connection};
 use std::{error::Error, sync::Arc};
 
-use crate::models::{Bid, Notification};
+use crate::models::{Bid, Notification, NotificationType};
 
 
 
@@ -22,20 +22,27 @@ pub async fn task_notify_bid(conn: Arc<Connection>){
         delivery.ack(BasicAckOptions::default()).await.unwrap();
         let bid: Bid = serde_json::from_slice(&delivery.data).unwrap();
 
-        publish_new_bid(&channel, &bid).await.unwrap();
+        publish_to_notification_exc(
+            &channel, 
+            &bid,
+            NotificationType::NewBid
+        ).await.unwrap();
     }
 }
 
 pub async fn task_notify_winner(conn: Arc<Connection>){
-
+    
 }
 
 /*====================================================== AUX ====================================================== */
 
 /*============================================= PUBLISH ============================================= */
 
-async fn publish_new_bid(channel: &Channel, bid: &Bid) -> Result<(), Box<dyn Error>>{
-    let notification = Notification::from_bid(bid);
+async fn publish_to_notification_exc(channel: &Channel, bid: &Bid, notification_type: NotificationType) -> Result<(), Box<dyn Error>>{
+    let notification = Notification::from_bid(
+        bid,
+        notification_type
+    );
     let routing_key: String = build_routing_key(notification.get_auction_id());
     let payload = serde_json::to_vec(&notification).unwrap();
 

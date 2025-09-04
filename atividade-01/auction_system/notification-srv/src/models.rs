@@ -17,9 +17,9 @@ pub struct Notification{
 }
 
 impl Notification{
-    pub fn from_bid(bid: &Bid) -> Notification{
+    pub fn from_bid(bid: &Bid, notification_type: NotificationType) -> Notification{
         Notification { 
-            notification_type: NotificationType::NewBid, 
+            notification_type, 
             data: NotificationData { 
                 auction_id: bid.auction_id, 
                 client_id: bid.client_id, 
