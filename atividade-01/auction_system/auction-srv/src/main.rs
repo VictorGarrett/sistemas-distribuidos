@@ -1,32 +1,44 @@
 use lapin::{
     options::{ExchangeDeclareOptions, QueueDeclareOptions}, types::FieldTable, Connection, ConnectionProperties
 };
-use tokio::runtime::Runtime;
-use std::time::{SystemTime, UNIX_EPOCH};
-use crate::auction::Auction;
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
+use std::{error::Error, time::{SystemTime, UNIX_EPOCH}};
+use std::sync::{Arc, mpsc};
+
+use crate::{auction::Auction, tasks::{task_cli, task_cron, task_publish_auction_finish, task_publish_auction_start}};
 
 pub mod auction;
+pub mod tasks;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    Runtime::new()?.block_on(run())
+
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let addr = "amqp://guest:guest@127.0.0.1:5672/%2f";
+    let conn = Arc::new(Connection::connect(addr, ConnectionProperties::default()).await?);
+
+
+    init_rabbitmq_structs(conn.clone()).await?;
+    let live_auctions = get_auctions();
+
+    let handles = init_tasks(conn, live_auctions);
+
+    for handle in handles{
+        handle.await?;
+    }
+
+    Ok(())    
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "amqp://guest:guest@127.0.0.1:5672/%2f";
-    let conn = Connection::connect(addr, ConnectionProperties::default()).await?;
-
+async fn init_rabbitmq_structs(conn: Arc<Connection>) -> Result<(), Box<dyn Error>>{
     let channel = conn.create_channel().await?;
-
-
-    channel
-        .exchange_declare(
-            "leilao_iniciado",           // exchange name
-            lapin::ExchangeKind::Fanout,
-            ExchangeDeclareOptions::default(),
-            FieldTable::default(),
-        )
-        .await
-        .expect("declare exchange");
+    channel.exchange_declare(
+        "leilao_iniciado",           // exchange name
+        lapin::ExchangeKind::Fanout,
+        ExchangeDeclareOptions::default(),
+        FieldTable::default(),
+    ).await?;
 
     channel.queue_declare(
         "leilao_finalizado", 
@@ -35,51 +47,49 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
 
-    
-    let auctions = get_auctions();
-    let mut auctions_ref: Vec<(&Auction, u128)>  = Vec::with_capacity(2 * auctions.len());
-    auctions.iter().for_each(|a| {
-        auctions_ref.push((a, a.start_timestamp));
-        auctions_ref.push((a, a.end_timestamp));
-    });
-    auctions_ref.sort_by(|a, b| a.1.cmp(&b.1));
-
-
-    for (auction, timestamp) in auctions_ref {
-        let mut now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-        if timestamp > now {
-            tokio::time::sleep(tokio::time::Duration::from_millis((timestamp - now) as u64)).await;
-        }
-
-        now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-        if now > auction.end_timestamp {
-            // publish to simple queue, this message goes to bid-srv only 
-            channel.basic_publish(
-                "", 
-                "leilao_finalizado", 
-                lapin::options::BasicPublishOptions::default(), 
-                auction.id.to_ne_bytes().as_ref(), 
-                lapin::BasicProperties::default()
-            ).await?.await?;
-            println!("Published to {}: {}", "leilao_finalizado", auction.id); 
-        } else {
-            // publish to fanout exchange, this message goes to all clients 
-            channel.basic_publish(
-                "leilao_iniciado", 
-                "", 
-                lapin::options::BasicPublishOptions::default(), 
-                auction.id.to_ne_bytes().as_ref(), 
-                lapin::BasicProperties::default()
-            ).await?.await?;
-        println!("Published to {}: {}", "leilao_iniciado", auction.id);
-        };
-
-        
-    }
-
     Ok(())
 }
 
+fn init_tasks(
+    conn: Arc<Connection>,
+    live_auctions: Vec<Auction>
+) -> Vec<JoinHandle<()>>{
+    let mut handles = Vec::new();
+
+    let (started_auction_tx, started_auction_rx) = mpsc::channel::<Auction>();
+    let (finished_auction_tx, finished_auction_rx) = mpsc::channel::<Auction>();
+    let (new_auction_tx, new_auction_rx) = mpsc::channel::<Auction>();
+
+    handles.push(tokio::spawn(
+        task_publish_auction_start(
+            conn.clone(),
+            started_auction_rx
+        )
+    ));
+
+    handles.push(tokio::spawn(
+        task_publish_auction_finish(
+            conn.clone(), 
+            finished_auction_rx
+        )
+    ));
+
+    handles.push(tokio::spawn(
+        task_cron(
+            live_auctions, 
+            new_auction_rx, 
+            started_auction_tx, 
+            finished_auction_tx
+        )
+    ));
+
+    handles.push(tokio::task::spawn_blocking(||{
+        task_cli(new_auction_tx);
+    }));
+
+    handles
+    
+}
 
 fn get_auctions() -> Vec<Auction> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
