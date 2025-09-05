@@ -3,9 +3,10 @@ use lapin::{
 };
 use tokio::runtime::Runtime;
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::auction::Auction;
+use serde_json;
 
 pub mod auction;
+use crate::auction::Auction;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     Runtime::new()?.block_on(run())
@@ -68,7 +69,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 "leilao_iniciado", 
                 "", 
                 lapin::options::BasicPublishOptions::default(), 
-                auction.id.to_ne_bytes().as_ref(), 
+                serde_json::to_vec(&auction).unwrap().as_slice(), 
                 lapin::BasicProperties::default()
             ).await?.await?;
         println!("Published to {}: {}", "leilao_iniciado", auction.id);

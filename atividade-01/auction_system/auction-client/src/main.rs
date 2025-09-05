@@ -18,7 +18,7 @@ use rsa::Pkcs1v15Sign;
 
 pub mod models;
 
-use crate::bid::Bid;
+use crate::models::*;
 
 pub mod tasks;
 use crate::tasks::{
@@ -38,24 +38,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
 
-    let pem = fs::read_to_string("private_key.pem")?;
+    //let pem = fs::read_to_string("private_key.pem")?;
+    let pem = "aaaaaa";
     let private_key = RsaPrivateKey::from_pkcs1_pem(pem)?;
 
 
-    init_tasks(conn, started_queue_name, notification_queue_name);
+    let prompt = Arc::new(Mutex::new(String::from("> ")));
+
+    let client = 
+    Arc::new(Mutex::new(Client {
+        id: 0,
+        subscribed_auctions: Vec::new(),
+        private_key: private_key.clone(),
+        //public_key: general_purpose::STANDARD.encode(private_key.to_public_key().to_pkcs1_pem()?),
+        public_key: "aaa".to_string(),
+        notification_queue_name: notification_queue_name.clone(),
+    }));
+    
+    let handles = init_tasks(conn, started_queue_name, client, prompt);
 
         
 
-    
-    
-    
-        
-
-    
-    
-
-    println!("Waiting for messages...");
-
+    for handle in handles {
+        handle.await?;
+    }
 
     Ok(())
 }
@@ -63,19 +69,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn init_tasks(
     conn: Arc<Connection>,
     started_queue_name: String,
-    notification_queue_name: String
+    client_mutex: Arc<Mutex<Client>>,
+    prompt: Arc<Mutex<String>>
 ) -> Vec<JoinHandle<()>> {
     let mut handles = Vec::new();
 
     handles.push(tokio::spawn(task_init_auction(
         conn.clone(),
-        started_queue_name
+        started_queue_name,
+        client_mutex.clone(),
+        prompt.clone()
     )));
 
     handles.push(tokio::spawn(task_receive_notification(
+        conn.clone(),
+        client_mutex.clone(),
+        prompt.clone()
     )));
 
     handles.push(tokio::spawn(task_process_input(
+        conn.clone(),
+        client_mutex.clone(),
+        prompt.clone()
     )));
 
 
@@ -162,33 +177,3 @@ async fn init_process_input(channel: &Channel) -> Result<(), Box<dyn std::error:
 }
 
 
-// make and publish a bid
-async fn make_bid(auction_id: u32, client_id: u32, value: f64, bid_queue: &lapin::Queue, private_key: &RsaPrivateKey) -> Bid {
-    
-    let content = format!("{}:{}:{}", auction_id, client_id, value).into_bytes();
-    
-    let hashed = Sha256::digest(content);
-
-    // sign
-    let signature = private_key.sign(
-        Pkcs1v15Sign::new_unprefixed(),
-        &hashed,
-    )?;
-    
-    let bid = Bid {
-        aution_id,
-        client_id,
-        value,
-        signature: general_purpose::STANDARD.encode(signature)
-    };
-
-    let payload = json!(bid).to_string();
-
-    channel.basic_publish(
-        "",
-        "lance_realizado",
-        BasicPublishOptions::default(),
-        payload.as_bytes(),
-        BasicProperties::default()
-    ).await?.await?;
-}
