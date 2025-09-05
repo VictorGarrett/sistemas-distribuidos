@@ -126,13 +126,12 @@ pub async fn task_init_auction(
         let delivery = delivery.unwrap();
         delivery.ack(Default::default()).await.unwrap();
 
-        let auction_id = u32::from_ne_bytes(delivery.data.as_slice().try_into().unwrap());
-        println!("Received delivery on leilao_iniciado: {auction_id}");
+        let auction: Auction = serde_json::from_slice(delivery.data.as_ref()).unwrap();
+        println!("Received delivery on leilao_iniciado: {}", auction.id);
 
         let mut auctions = auctions.lock().await;
         
-        let new_auction = Auction::new(auction_id, "something".to_string());
-        auctions.push(new_auction);
+        auctions.push(auction);
         drop(auctions); //ensures lock is released before next iteration
     }
 }

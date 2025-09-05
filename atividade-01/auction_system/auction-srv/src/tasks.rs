@@ -39,7 +39,7 @@ pub async fn task_publish_auction_finish(
     let channel = conn.create_channel().await.unwrap();
 
     while let Some(auction) = finished_auction_rx.recv().await{
-        let payload = serde_json::to_vec(&auction).unwrap();
+        let payload = auction.id.to_ne_bytes();
         channel
             .basic_publish(
                 "",
