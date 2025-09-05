@@ -11,6 +11,19 @@ pub struct Bid {
     pub valid: bool
 }
 
+impl Bid{
+    pub fn new(auction_id: u32, client_id: u32, value: f64) -> Bid{
+        Bid{
+            auction_id,
+            client_id,
+            value,
+            signature: "".to_string(),
+            public_key: "".to_string(),
+            valid: true,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Auction{
     pub id: u32,

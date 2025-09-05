@@ -4,12 +4,11 @@ use lapin::{
 };
 use lapin::types::FieldTable;
 
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
+use std::error::Error;
 
+use tokio::{task::JoinHandle};
 
-use tokio::{sync::Mutex, task::JoinHandle};
-
-use futures_lite::stream::StreamExt;
 use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
 use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
 use sha2::{Digest, Sha256};
@@ -17,14 +16,15 @@ use base64::{engine::general_purpose, Engine as _};
 use rsa::Pkcs1v15Sign;
 
 pub mod models;
-
-use crate::bid::Bid;
-
 pub mod tasks;
+pub mod client;
+pub mod cli;
+pub mod command;
+
+use crate::command::Command;
+
 use crate::tasks::{
-    task_init_auction,
-    task_receive_notification,
-    task_process_input
+    task_cli, task_leilao_iniciado, task_publish_cmd, task_receive_notification
 };
 
 #[tokio::main]
@@ -34,50 +34,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Consumer connected to RabbitMQ!");
     let conn = Arc::new(conn);
 
-    let (started_queue_name, notification_queue_name) = init_rabbitmq_structs(conn.clone()).await?;
+    let (notification_queue_name, leilao_iniciado_mq) = init_rabbitmq_structs(conn.clone()).await?;
 
+    // let pem = fs::read_to_string("private_key.pem")?;
+    // let private_key = RsaPrivateKey::from_pkcs1_pem(pem)?;
 
+    let handles = init_tasks(
+        conn, 
+        notification_queue_name,
+        leilao_iniciado_mq
+    );
 
-    let pem = fs::read_to_string("private_key.pem")?;
-    let private_key = RsaPrivateKey::from_pkcs1_pem(pem)?;
-
-
-    init_tasks(conn, started_queue_name, notification_queue_name);
-
-        
-
-    
-    
-    
-        
-
-    
-    
-
-    println!("Waiting for messages...");
-
+    tokio::join!(handles);
 
     Ok(())
 }
 
-fn init_tasks(
+async fn init_tasks(
     conn: Arc<Connection>,
-    started_queue_name: String,
-    notification_queue_name: String
+    notification_queue_name: String,
+    leilao_iniciado_mq: String
 ) -> Vec<JoinHandle<()>> {
     let mut handles = Vec::new();
 
-    handles.push(tokio::spawn(task_init_auction(
-        conn.clone(),
-        started_queue_name
-    )));
+    let (sender, receiver) = mpsc::channel::<Command>();
+
+    handles.push(tokio::task::spawn_blocking(|| {
+        task_cli(sender)
+    }));
 
     handles.push(tokio::spawn(task_receive_notification(
+        conn.clone(),
+        notification_queue_name
     )));
 
-    handles.push(tokio::spawn(task_process_input(
+    handles.push(tokio::spawn(task_publish_cmd(
+        conn.clone(),
+        receiver
     )));
 
+    handles.push(tokio::spawn(task_leilao_iniciado(
+        conn.clone(), 
+        leilao_iniciado_mq,
+        "client_0".to_string()
+    )));
 
     handles
 }
@@ -89,7 +89,7 @@ async fn init_rabbitmq_structs(conn: Arc<Connection>) -> Result<(String, String)
     let notification_queue_name = init_receive_notification(&channel).await?;
     init_process_input(&channel).await?;
 
-    Ok((started_queue_name, notification_queue_name))
+    Ok((notification_queue_name, started_queue_name))
 }
 
 async fn init_leilao_iniciado(channel: &Channel) -> Result<String, Box<dyn std::error::Error>>{
@@ -134,7 +134,6 @@ async fn init_receive_notification(channel: &Channel) -> Result<String, Box<dyn 
         )
         .await?;
 
-    
     let notification_queue = channel
         .queue_declare(
             "", // random name
@@ -143,8 +142,6 @@ async fn init_receive_notification(channel: &Channel) -> Result<String, Box<dyn 
         )
         .await?;
     
-
-
     Ok(notification_queue.name().to_string())
 }
 
@@ -157,38 +154,36 @@ async fn init_process_input(channel: &Channel) -> Result<(), Box<dyn std::error:
         )
         .await?;
 
-
     Ok(())
 }
 
 
 // make and publish a bid
-async fn make_bid(auction_id: u32, client_id: u32, value: f64, bid_queue: &lapin::Queue, private_key: &RsaPrivateKey) -> Bid {
-    
-    let content = format!("{}:{}:{}", auction_id, client_id, value).into_bytes();
-    
-    let hashed = Sha256::digest(content);
+// async fn make_bid(auction_id: u32, client_id: u32, value: f64, bid_queue: &lapin::Queue, private_key: &RsaPrivateKey) -> Result<Bid, Box<dyn Error>> {
+//     let content = format!("{}:{}:{}", auction_id, client_id, value).into_bytes();
+//     let hashed = Sha256::digest(content);
 
-    // sign
-    let signature = private_key.sign(
-        Pkcs1v15Sign::new_unprefixed(),
-        &hashed,
-    )?;
-    
-    let bid = Bid {
-        aution_id,
-        client_id,
-        value,
-        signature: general_purpose::STANDARD.encode(signature)
-    };
+//     // sign
+//     let signature = private_key.sign(
+//         Pkcs1v15Sign::new_unprefixed(),
+//         &hashed,
+//     )?;
+//     let bid = Bid {
+//         auction_id,
+//         client_id,
+//         value,
+//         signature: general_purpose::STANDARD.encode(signature)
+//     };
 
-    let payload = json!(bid).to_string();
+//     let payload = json!(bid).to_string();
 
-    channel.basic_publish(
-        "",
-        "lance_realizado",
-        BasicPublishOptions::default(),
-        payload.as_bytes(),
-        BasicProperties::default()
-    ).await?.await?;
-}
+//     channel.basic_publish(
+//         "",
+//         "lance_realizado",
+//         BasicPublishOptions::default(),
+//         payload.as_bytes(),
+//         BasicProperties::default()
+//     ).await?.await?;
+
+//     Ok(())
+// }

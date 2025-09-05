@@ -1,15 +1,13 @@
-use std::sync::Arc;
+use std::{io, sync::{mpsc::{Receiver, Sender}, Arc}};
 use tokio::sync::Mutex;
 use lapin::{
     options::{
-        BasicConsumeOptions, 
-        BasicPublishOptions, 
+        BasicAckOptions, BasicConsumeOptions, BasicPublishOptions 
     }, 
     types::FieldTable, Channel, Connection
 };
 use futures_lite::stream::StreamExt;
 use rsa::{
-    pkcs8::DecodePublicKey, 
     RsaPublicKey, 
     Pkcs1v15Sign
 };
@@ -17,63 +15,33 @@ use sha2::{Digest, Sha256};
 
 use serde_json;
 
-use crate::models::*;
-
-use crate::client::Client;
+use crate::{cli::Cli, models::*};
+use crate::command::{Command, parse_cmd};
 
 /*==================================================== TASKS  ====================================================*/
 
-pub async fn task_process_input(
-    auctions: Arc<Mutex<Vec<Auction>>>,
-    bids: Arc<Mutex<Vec<Bid>>>,
-    conn: Arc<Connection>,
+pub fn task_cli(
+    sender: Sender<Command>
 ) {
-    let channel = conn.create_channel().await.unwrap();
+    let mut buffer = String::with_capacity(100);
+    let stdin = io::stdin();
 
-    let mut consumer = channel.basic_consume(
-        "leilao_finalizado", 
-        "bid-srv", 
-        BasicConsumeOptions::default(), 
-        FieldTable::default()
-    ).await.unwrap();
-
-    while let Some(delivery) = consumer.next().await {
-        let delivery = delivery.unwrap();
-        delivery.ack(Default::default()).await.unwrap();
-
-        let auction_id = u32::from_ne_bytes(delivery.data.as_slice().try_into().unwrap());
-        let mut auctions = auctions.lock().await;
-        if let Some(auction) = auctions.iter_mut().find(|a| a.id == auction_id){
-            auction.is_active = false;
+    while let Ok(read_bytes) = stdin.read_line(&mut buffer){
+        match parse_cmd(buffer[..read_bytes].as_ref()){
+            Some(cmd) => sender.send(cmd).unwrap(),
+            None => println!("Invalid command.")
         }
-        drop(auctions); //ensures lock is released before next iteration
-
-        //If there is a bid for this auction, publish the winner bid
-        let bids = bids.lock().await;
-        if let Some(winning_bid) = bids
-            .iter()
-            .filter(|a| a.auction_id == auction_id)
-            .max_by(|a, b| a.value.partial_cmp(&b.value).unwrap())
-        {
-            publish_winner_bid(&channel, winning_bid).await.unwrap();
-        }
-        drop(bids); //ensures lock is released before next iteration
-            
     }
 }
 
 pub async fn task_receive_notification(
-    auctions: Arc<Mutex<Vec<Auction>>>,
-    bids: Arc<Mutex<Vec<Bid>>>,
     conn: Arc<Connection>,
+    notification_mq: String
 ) {
 
     let channel = conn.create_channel().await.unwrap();
-
-
-    
     let mut consumer = channel.basic_consume(
-        "lance_realizado_bid-srv", 
+        notification_mq.as_str(), 
         "bid-srv", 
         BasicConsumeOptions::default(), 
         FieldTable::default()
@@ -82,42 +50,43 @@ pub async fn task_receive_notification(
     while let Some(delivery) = consumer.next().await {
         let delivery = delivery.unwrap();
         delivery.ack(Default::default()).await.unwrap();
+    }
+}
 
-        
+pub async fn task_publish_cmd(
+    conn: Arc<Connection>,
+    receiver: Receiver<Command>
+){
+    let channel = conn.create_channel().await.unwrap();
+
+    while let Ok(cmd) = receiver.recv(){
+        let Command::PlaceBid(auction_id, bid_value) = cmd;
+        let bid = Bid::new(auction_id, 0, bid_value);
+        publish_bid(&channel, &bid).await.unwrap();
     }
 
 }
 
-pub async fn task_init_auction(
+pub async fn task_leilao_iniciado(
     conn: Arc<Connection>,
-    started_queue_name: String,
-    client_mutex: Arc<Mutex<Client>>
+    leilao_iniciado_mq: String,
+    client_tag: String
 ){
     let channel = conn.create_channel().await.unwrap();
 
-    let client = client_mutex.lock().await;
     let mut consumer = channel.basic_consume(
-            started_queue_name.as_str(), 
-            &format!("client-started-consumer-{}", client.id),
-            BasicConsumeOptions::default(), 
-            FieldTable::default()
-        )
-        .await
-        .unwrap();
-    drop(client);
+        leilao_iniciado_mq.as_str(), 
+        client_tag.as_str(), 
+        BasicConsumeOptions::default(), 
+        FieldTable::default()
+    ).await.unwrap();
 
-    while let Some(delivery) = consumer.next().await {
+    while let Some(delivery) = consumer.next().await{
         let delivery = delivery.unwrap();
-        delivery.ack(Default::default()).await.unwrap();
+        delivery.ack(BasicAckOptions::default()).await.unwrap();
 
         let auction_id = u32::from_ne_bytes(delivery.data.as_slice().try_into().unwrap());
-        let mut client = client_mutex.lock().await;
-        
-        let new_auction = Auction::new(auction_id, "something".to_string());
-        client.subscribed_auctions.push(new_auction);
-        drop(client); //ensures lock is released before next iteration
-
-        
+        println!("New auction started!\nAuction ID: {auction_id}\n>");
     }
 }
 
@@ -129,7 +98,7 @@ pub async fn task_init_auction(
 /*============================================= PUBLISH ============================================= */
 
 
-async fn publish_validated_bid(
+async fn publish_bid(
     channel: &Channel, 
     bid: &Bid
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -146,24 +115,6 @@ async fn publish_validated_bid(
         .await?;
     Ok(())
 }
-
-async fn publish_winner_bid(
-    channel: &Channel, 
-    bid: &Bid
-) -> Result<(), Box<dyn std::error::Error>> {
-    let payload = serde_json::to_vec(bid)?;
-    channel
-        .basic_publish(
-            "",
-            "leilao_vencedor",
-            BasicPublishOptions::default(),
-            &payload,
-            lapin::BasicProperties::default(),
-        )
-        .await?
-        .await?;
-    Ok(())
-}  
 
 /*============================================= PUBLISH - END ============================================= */
 
