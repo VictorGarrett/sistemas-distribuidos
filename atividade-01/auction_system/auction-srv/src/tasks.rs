@@ -1,17 +1,16 @@
-use serde::de::value::EnumAccessDeserializer;
 use tokio::sync::{mpsc::{Receiver, Sender}};
-use lapin::{options::BasicPublishOptions, types::FieldTable, BasicProperties, Connection};
+use lapin::{options::BasicPublishOptions, BasicProperties, Connection};
 
 use std::{sync::Arc, time::{Duration, SystemTime}};
 
 use crate::models::Auction;
 use crate::cli::Cli;
 
-pub fn task_cli(
+pub async fn task_cli(
     new_auction_tx: Sender<Auction>,
     cli: Cli
 ){
-    cli.run(new_auction_tx);
+    cli.run(new_auction_tx).await.unwrap();
 }
 
 pub async fn task_publish_auction_start(

@@ -85,9 +85,9 @@ fn init_tasks(
         )
     ));
 
-    handles.push(tokio::task::spawn_blocking(||{
-        task_cli(new_auction_tx, cli);
-    }));
+    handles.push(tokio::spawn(
+        task_cli(new_auction_tx, cli)
+    ));
 
     handles
     

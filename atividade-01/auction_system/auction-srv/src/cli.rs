@@ -5,7 +5,7 @@ use crossterm::{
 };
 use std::{io::{self, stdout, Write}};
 
-use tokio::sync::mpsc::{Sender, Receiver};
+use tokio::sync::mpsc::{Sender};
 
 use crate::models::{Auction, CliCommand};
 pub struct Cli {
@@ -32,7 +32,6 @@ impl Cli {
         enable_raw_mode()?;
         let mut stdout = stdout();
         execute!(stdout, EnterAlternateScreen)?;
-        
         loop {
             self.draw_ui()?;
             
@@ -59,7 +58,7 @@ impl Cli {
         let (rows, _cols) = crossterm::terminal::size()?;
         let message_area_height = rows - 2;
         
-        for (i, message) in self.messages.iter().rev().skip(self.scroll_offset).take(message_area_height as usize).enumerate() {
+        for (i, message) in self.messages.iter().skip(self.scroll_offset).take(message_area_height as usize).enumerate(){
             execute!(
                 stdout(),
                 crossterm::cursor::MoveTo(0, (message_area_height - i as u16) as u16),
@@ -101,14 +100,14 @@ impl Cli {
                 self.command_input.clear();
                 
                 if !command.is_empty() {
-                    self.messages.push(format!("> {}", command));
+                    self.messages.push(format!("> {}\n", command));
                     
                     // Process command
                     match self.parse_command(command){
                         Ok(cmd)=>{
                             self.send_new_auction(cmd, new_auction_tx).await;
                         },
-                        Err(e) => self.messages.push(format!("Error: {}", e)),
+                        Err(e) => self.messages.push(format!("Error: {}\n", e)),
                     }
                 }
             }
