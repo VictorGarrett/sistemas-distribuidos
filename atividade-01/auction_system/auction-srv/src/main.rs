@@ -4,9 +4,10 @@ use lapin::{
 
 use tokio::task::JoinHandle;
 use std::{error::Error, time::{SystemTime, UNIX_EPOCH}};
-use std::sync::{Arc, mpsc};
+use tokio::sync::mpsc;
+use std::sync::Arc;
 
-use crate::{models::Auction, tasks::{task_cli, task_cron, task_publish_auction_finish, task_publish_auction_start}};
+use crate::{cli::Cli, models::Auction, tasks::{task_cli, task_cron, task_publish_auction_finish, task_publish_auction_start}};
 
 pub mod models;
 pub mod tasks;
@@ -57,10 +58,10 @@ fn init_tasks(
 ) -> Vec<JoinHandle<()>>{
     let mut handles = Vec::new();
 
-    let (started_auction_tx, started_auction_rx) = mpsc::channel::<Auction>();
-    let (finished_auction_tx, finished_auction_rx) = mpsc::channel::<Auction>();
-    let (new_auction_tx, new_auction_rx) = mpsc::channel::<Auction>();
-
+    let (started_auction_tx, started_auction_rx) = mpsc::channel::<Auction>(20);
+    let (finished_auction_tx, finished_auction_rx) = mpsc::channel::<Auction>(20);
+    let (new_auction_tx, new_auction_rx) = mpsc::channel::<Auction>(20);
+    let cli = Cli::new(Some(live_auctions.clone()));
     handles.push(tokio::spawn(
         task_publish_auction_start(
             conn.clone(),
@@ -85,7 +86,7 @@ fn init_tasks(
     ));
 
     handles.push(tokio::task::spawn_blocking(||{
-        task_cli(new_auction_tx);
+        task_cli(new_auction_tx, cli);
     }));
 
     handles

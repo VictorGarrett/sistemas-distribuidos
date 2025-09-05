@@ -1,5 +1,6 @@
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Auction {
     pub id: u32,
     pub item: String,

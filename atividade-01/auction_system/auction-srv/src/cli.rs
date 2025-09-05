@@ -8,7 +8,7 @@ use std::{io::{self, stdout, Write}};
 use tokio::sync::mpsc::{Sender, Receiver};
 
 use crate::models::{Auction, CliCommand};
-struct Cli {
+pub struct Cli {
     command_input: String,
     messages: Vec<String>,
     scroll_offset: usize,
@@ -16,7 +16,7 @@ struct Cli {
 }
 
 impl Cli {
-    fn new(auctions: Option<Vec<Auction>>) -> Self {
+    pub fn new(auctions: Option<Vec<Auction>>) -> Self {
         Self {
             command_input: String::new(),
             messages: Vec::new(),
@@ -25,9 +25,8 @@ impl Cli {
         }
     }
     
-    async fn run(
+    pub async fn run(
         mut self,
-        mut rx: Receiver<String>,
         tx: Sender<Auction>,
     ) -> io::Result<()> {
         enable_raw_mode()?;
@@ -44,11 +43,6 @@ impl Cli {
                         break;
                     }
                 }
-            }
-            
-            // Check for scheduler messages
-            if let Ok(message) = rx.try_recv() {
-                self.handle_notification(message);
             }
         }
         
