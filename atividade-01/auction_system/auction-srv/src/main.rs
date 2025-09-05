@@ -1,15 +1,16 @@
 use lapin::{
     options::{ExchangeDeclareOptions, QueueDeclareOptions}, types::FieldTable, Connection, ConnectionProperties
 };
-use tokio::sync::Mutex;
+
 use tokio::task::JoinHandle;
 use std::{error::Error, time::{SystemTime, UNIX_EPOCH}};
 use std::sync::{Arc, mpsc};
 
-use crate::{auction::Auction, tasks::{task_cli, task_cron, task_publish_auction_finish, task_publish_auction_start}};
+use crate::{models::Auction, tasks::{task_cli, task_cron, task_publish_auction_finish, task_publish_auction_start}};
 
-pub mod auction;
+pub mod models;
 pub mod tasks;
+pub mod cli;
 
 
 

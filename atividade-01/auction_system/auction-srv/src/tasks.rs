@@ -1,7 +1,7 @@
 use std::sync::{mpsc::{Receiver, Sender}, Arc};
 use lapin::Connection;
 
-use crate::auction::Auction;
+use crate::models::Auction;
 
 
 pub fn task_cli(
