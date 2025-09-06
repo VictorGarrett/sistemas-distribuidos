@@ -6,4 +6,4 @@ members = [
     "notification-srv", 
     "bid-srv",
     "auction-client"
-]
+, "shared"]
