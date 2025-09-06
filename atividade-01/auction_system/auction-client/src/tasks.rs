@@ -2,6 +2,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use lapin::options::{QueueBindOptions};
+use tokio::sync::{mpsc::{Receiver, Sender}};
 
 
 use lapin::{
@@ -25,120 +26,86 @@ use crossterm::{
 };
 use std::io::{self, Write};
 use base64::{engine::general_purpose, Engine as _};
-
 use serde_json;
+use crate::models::{Bid, Client, Notification, NotificationType, Auction};
+use crate::cli::Cli;
 
-use crate::models::*;
+
 
 /*==================================================== TASKS  ====================================================*/
 
-pub async fn task_process_input(
+
+pub async fn task_cli(
+    make_bid_tx: Sender<Bid>,
+    subscribe_tx: Sender<String>,
+    mut cli_print_rx: Receiver<String>,
+    cli: Cli
+){
+    cli.run(make_bid_tx, subscribe_tx, cli_print_rx).await.unwrap();
+}
+
+pub async fn task_subscribe(
     conn: Arc<Connection>,
     client_mutex: Arc<Mutex<Client>>,
-    prompt: Arc<Mutex<String>>,
+    mut subscribe_rx: Receiver<String>,
 ) {
     let channel = conn.create_channel().await.unwrap();
 
-    enable_raw_mode().unwrap();
-    let stdin = tokio::io::stdin();
-    let mut reader = BufReader::new(stdin).lines();
+    while let Some(auction_id_str) = subscribe_rx.recv().await {
+        if let Ok(auction_id) = auction_id_str.parse::<u32>() {
+            let mut client = client_mutex.lock().await;
+            client.subscribed_auctions.push(auction_id);
 
-    loop {
-        {
-            let p = prompt.lock().await;
-            print!("{}", *p);
-            io::stdout().flush().unwrap();
+            channel
+                .queue_bind(
+                    &client.notification_queue_name,
+                    "notificacoes",
+                    &format!("leilao{}", auction_id),
+                    QueueBindOptions::default(),
+                    FieldTable::default(),
+                )
+                .await
+                .unwrap();
+            drop(client);
+        } else {
+            println!("Invalid auction id: {}", auction_id_str);
         }
+    }
 
-        if let Ok(Some(line)) = reader.next_line().await {
-            let parts: Vec<&str> = line.trim().split_whitespace().collect();
-            if parts.is_empty() {
-                continue;
-            }
+}
 
-            match parts[0] {
-                "subscribe" if parts.len() == 2 => {
-                    if let Ok(id) = parts[1].parse::<u32>() {
-                        let mut client = client_mutex.lock().await;
-                        client.subscribed_auctions.push(id);
+pub async fn task_make_bid(
+    conn: Arc<Connection>,
+    client_mutex: Arc<Mutex<Client>>,
+    mut make_bid_rx: Receiver<Bid>,
+) {
+    let channel = conn.create_channel().await.unwrap();
 
-                        channel
-                            .queue_bind(
-                                &client.notification_queue_name,
-                                "notification",
-                                &format!("leilao{}", id),
-                                QueueBindOptions::default(),
-                                FieldTable::default(),
-                            )
-                            .await
-                            .unwrap();
-                        drop(client);
-                    } else {
-                        // Safe printing without breaking the prompt
-                        let p = prompt.lock().await;
-                        execute!(
-                            io::stdout(),
-                            cursor::SavePosition,
-                            Clear(ClearType::CurrentLine),
-                        )
-                        .unwrap();
-                        println!("Invalid auction id");
-                        print!("{}", *p);
-                        io::stdout().flush().unwrap();
-                        execute!(io::stdout(), cursor::RestorePosition).unwrap();
-                    }
-                }
-                "bid" if parts.len() == 3 => {
-                    if let (Ok(auction_id), Ok(value)) =
-                        (parts[1].parse::<u32>(), parts[2].parse::<f64>())
-                    {
-                        let client = client_mutex.lock().await;
-                        let bid = make_bid(
-                            auction_id,
-                            client.id,
-                            value,
-                            &client.private_key,
-                            client.public_key.clone(),
-                        )
-                        .await;
-                        drop(client);
-                        publish_bid(&channel, &bid).await;
-                    } else {
-                        let p = prompt.lock().await;
-                        execute!(
-                            io::stdout(),
-                            cursor::SavePosition,
-                            Clear(ClearType::CurrentLine),
-                        )
-                        .unwrap();
-                        println!("Invalid bid format");
-                        print!("{}", *p);
-                        io::stdout().flush().unwrap();
-                        execute!(io::stdout(), cursor::RestorePosition).unwrap();
-                    }
-                }
-                _ => {
-                    let p = prompt.lock().await;
-                    execute!(
-                        io::stdout(),
-                        cursor::SavePosition,
-                        Clear(ClearType::CurrentLine),
-                    )
-                    .unwrap();
-                    println!("Unknown command. Use: subscribe <id> or bid <id> <value>");
-                    print!("{}", *p);
-                    io::stdout().flush().unwrap();
-                    execute!(io::stdout(), cursor::RestorePosition).unwrap();
-                }
-            }
-        }
+    while let Some(mut bid) = make_bid_rx.recv().await {
+
+        let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes();
+    
+        let hashed = Sha256::digest(content);
+
+        let client = client_mutex.lock().await;
+        // sign
+        let signature = client.private_key.sign(
+            Pkcs1v15Sign::new_unprefixed(),
+            &hashed,
+        ).unwrap();
+
+        bid.signature = general_purpose::STANDARD.encode(signature);
+        bid.public_key = client.public_key.clone();
+        drop(client);
+
+        publish_bid(&channel, &bid).await.unwrap();
     }
 }
 
 pub async fn task_receive_notification(
     conn: Arc<Connection>,
     client_mutex: Arc<Mutex<Client>>,
-    prompt: Arc<Mutex<String>>
+    cli_print_tx: Sender<String>,
 ) {
 
     let channel = conn.create_channel().await.unwrap();
@@ -146,13 +113,14 @@ pub async fn task_receive_notification(
 
     let mut consumer = channel
         .basic_consume(
-            "",
+            client.notification_queue_name.as_str(),
             &format!("client-notification-consumer-{}", client.id),
             BasicConsumeOptions::default(),
             FieldTable::default(),
         )
         .await
         .unwrap();
+    drop(client);
 
     while let Some(delivery) = consumer.next().await {
         let delivery = delivery.unwrap();
@@ -161,40 +129,31 @@ pub async fn task_receive_notification(
         // Deserialize the notification
         let notification: Notification = serde_json::from_slice(&delivery.data).unwrap();
 
-        // Lock the prompt to safely redraw
-        let p = prompt.lock().await;
-
-        // Save cursor, clear current line, print notification, restore prompt
-        execute!(
-            io::stdout(),
-            cursor::SavePosition,
-            Clear(ClearType::CurrentLine),
-        )
-        .unwrap();
 
         match notification.get_notification_type() {
             NotificationType::NewBid => {
-                println!(
-                    "[NOTIFICATION] New bid: auction={} client={} value={}",
-                    notification.get_auction_id(),
-                    notification.get_client_id(),
-                    notification.get_bid_value()
-                );
+                cli_print_tx
+                    .send(format!(
+                        "[NOTIFICATION] New bid: auction={} client={} value={}",
+                        notification.get_auction_id(),
+                        notification.get_client_id(),
+                        notification.get_bid_value()
+                    ))
+                    .await
+                    .unwrap();
             }
             NotificationType::AuctionWinner => {
-                println!(
-                    "[NOTIFICATION] Auction winner: auction={} client={} value={}",
-                    notification.get_auction_id(),
-                    notification.get_client_id(),
-                    notification.get_bid_value()
-                );
+                cli_print_tx
+                    .send(format!(
+                        "[NOTIFICATION] Auction winner: auction={} client={} value={}",
+                        notification.get_auction_id(),
+                        notification.get_client_id(),
+                        notification.get_bid_value()
+                    ))
+                    .await
+                    .unwrap();
             }
         }
-
-        // Reprint prompt
-        print!("{}", *p);
-        io::stdout().flush().unwrap();
-        execute!(io::stdout(), cursor::RestorePosition).unwrap();
     }
 
 }
@@ -203,7 +162,7 @@ pub async fn task_init_auction(
     conn: Arc<Connection>,
     started_queue_name: String,
     client_mutex: Arc<Mutex<Client>>,
-    prompt: Arc<Mutex<String>>
+    cli_print_tx: Sender<String>,
 ){
     let channel = conn.create_channel().await.unwrap();
 
@@ -221,27 +180,19 @@ pub async fn task_init_auction(
     while let Some(delivery) = consumer.next().await {
         let delivery = delivery.unwrap();
         delivery.ack(Default::default()).await.unwrap();
-
+        println!("[AUCTION STARTED] Received auction data: {:?}", delivery.data);
 
         let auction:Auction = serde_json::from_slice(&delivery.data).unwrap();
         
-        let p: tokio::sync::MutexGuard<'_, String> = prompt.lock().await;
-        execute!(
-            io::stdout(),
-            cursor::SavePosition,
-            Clear(ClearType::CurrentLine),
-        )
-        .unwrap();
-
-        println!(
-            "[AUCTION] id={} item={} active={}",
-            auction.id, auction.item, auction.is_active
-        );
-
-        print!("{}", *p);
-        io::stdout().flush().unwrap();
-        execute!(io::stdout(), cursor::RestorePosition).unwrap();
-
+        if let Err(e) = cli_print_tx
+            .send(format!(
+                "[AUCTION] id={} item={} active={}",
+                auction.id, auction.item, auction.status
+            ))
+            .await
+        {
+            eprintln!("Failed to send auction message to CLI: {}", e);
+        }
 
     }
 
@@ -277,29 +228,5 @@ async fn publish_bid(
 
 /*============================================= PUBLISH - END ============================================= */
 
-/*============================================= BID MAKING ============================================= */
-// make and publish a bid
-async fn make_bid(auction_id: u32, client_id: u32, value: f64, private_key: &RsaPrivateKey, public_key: String) -> Bid {
-    
-    let content = format!("{}:{}:{}", auction_id, client_id, value).into_bytes();
-    
-    let hashed = Sha256::digest(content);
-
-    // sign
-    let signature = private_key.sign(
-        Pkcs1v15Sign::new_unprefixed(),
-        &hashed,
-    ).unwrap();
-    
-    return Bid {
-        auction_id,
-        client_id,
-        value,
-        signature: general_purpose::STANDARD.encode(signature),
-        public_key: public_key,
-        valid: false
-    };
-
-}
 
 /*============================================= BID VERIFICATION - END ============================================= */

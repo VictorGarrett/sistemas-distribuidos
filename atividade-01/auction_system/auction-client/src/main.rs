@@ -2,16 +2,19 @@ use lapin::options::{QueueDeclareOptions, QueueBindOptions, ExchangeDeclareOptio
 use lapin::{
     Channel, Connection, ConnectionProperties
 };
+use tokio::sync::mpsc;
+
+
 use lapin::types::FieldTable;
 
 use std::sync::Arc;
+use crate::cli::Cli;
+
 
 
 use tokio::{sync::Mutex, task::JoinHandle};
-
-use futures_lite::stream::StreamExt;
 use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
-use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
+use rsa::pkcs1::{DecodeRsaPrivateKey, EncodeRsaPublicKey};
 use sha2::{Digest, Sha256};
 use base64::{engine::general_purpose, Engine as _};
 use rsa::Pkcs1v15Sign;
@@ -24,8 +27,12 @@ pub mod tasks;
 use crate::tasks::{
     task_init_auction,
     task_receive_notification,
-    task_process_input
+    task_make_bid,
+    task_subscribe,
+    task_cli
 };
+pub mod cli;
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,25 +44,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (started_queue_name, notification_queue_name) = init_rabbitmq_structs(conn.clone()).await?;
 
 
+    // create aaaa 1757163605 1757164999
 
     //let pem = fs::read_to_string("private_key.pem")?;
-    let pem = "aaaaaa";
+    let pem = "-----BEGIN RSA PRIVATE KEY-----
+MIICWgIBAAKBgGmcA0BGDhveEY6+dmEo1lil2NpB0Y8NpXdpBUi5DZLbk9Sg/sTv
+8z/AURr99a7MKAVFFngHTioOwxB5ruwhdvuFKKyqTnzYK2dv87WJ7GqqUda2rlhB
+my4CCOXSS+YLqgdQYj4QesBDOC9ojdFaIPGIyp77J4iHAoICxN+y+Rn9AgMBAAEC
+gYAarXFYzBmGSptuzogC1RkIPaTAxX2VQGI6/sl57F0Uauk1/hE9WEu/H+qdAegM
+5r95TVF2som5MA9wWvyn43A1l+zjuHYZIZZTNguhbDZ+oFEWFxERzzqe1EF+DQ25
+n4vV9H2Iww2KdbyC8RuabK/QRqeTBH+JNOw5Ng84Hkbg9QJBAKxSpaPsHeHR+r/Y
+vqiuTqnzxp6WKkoJ5t+w6ZmCLisoAUpyjZcMKJfdditf1ypCL5CpbMxV/Dh0Wt8E
+bvo2lwsCQQCc5EJqTCP9LVs9Pn4UoSQLoR9K39zu4sE0rbXyXsLx2dlb992ednCm
+f89vZZ9hVaR5EUn+51s34QUxUnXdCZgXAkBeoniy4B29AUr6hraV/jvXG7hNKVyK
+EowG9qojEpn2O18SGnzlodi9JfMaeOS6IWTrxg+o2+PKwSOSbGXh5Y7nAkA+ywTh
+8nN9A0g/LOHdc9kvZl9V4l9UpSDa6qOly9OOZLigHIZww8q2ePUXCr9Nf6+CXS8W
+fJZ/uOoRIYXW394lAkA89SZ9iU/6GkTG6z5hzENPfiuiPGV3Ytp+TgbDxprVhGrv
+sdpoIwdgJDlOHWpRethjNiNx7FITofCcsqC/8Mp7
+-----END RSA PRIVATE KEY-----";
     let private_key = RsaPrivateKey::from_pkcs1_pem(pem)?;
 
-
-    let prompt = Arc::new(Mutex::new(String::from("> ")));
 
     let client = 
     Arc::new(Mutex::new(Client {
         id: 0,
         subscribed_auctions: Vec::new(),
         private_key: private_key.clone(),
-        //public_key: general_purpose::STANDARD.encode(private_key.to_public_key().to_pkcs1_pem()?),
-        public_key: "aaa".to_string(),
+        public_key: private_key.to_public_key().to_pkcs1_pem(rsa::pkcs8::LineEnding::LF)?.to_string(),
         notification_queue_name: notification_queue_name.clone(),
     }));
     
-    let handles = init_tasks(conn, started_queue_name, client, prompt);
+    let handles = init_tasks(conn, started_queue_name, client);
 
         
 
@@ -70,28 +89,42 @@ fn init_tasks(
     conn: Arc<Connection>,
     started_queue_name: String,
     client_mutex: Arc<Mutex<Client>>,
-    prompt: Arc<Mutex<String>>
 ) -> Vec<JoinHandle<()>> {
     let mut handles = Vec::new();
+
+    let (make_bid_tx, make_bid_rx) = mpsc::channel::<Bid>(20);
+    let (subscribe_tx, subscribe_rx) = mpsc::channel::<String>(20);
+    let (cli_print_tx, cli_print_rx) = mpsc::channel::<String>(20);
+    let cli = Cli::new();
 
     handles.push(tokio::spawn(task_init_auction(
         conn.clone(),
         started_queue_name,
         client_mutex.clone(),
-        prompt.clone()
+        cli_print_tx.clone()
     )));
 
     handles.push(tokio::spawn(task_receive_notification(
         conn.clone(),
         client_mutex.clone(),
-        prompt.clone()
+        cli_print_tx
     )));
 
-    handles.push(tokio::spawn(task_process_input(
+    handles.push(tokio::spawn(task_subscribe(
         conn.clone(),
         client_mutex.clone(),
-        prompt.clone()
+        subscribe_rx,
     )));
+
+    handles.push(tokio::spawn(task_make_bid(
+        conn.clone(),
+        client_mutex.clone(),
+        make_bid_rx
+    )));
+
+    handles.push(tokio::spawn(
+        task_cli(make_bid_tx, subscribe_tx, cli_print_rx, cli)
+    ));
 
 
     handles

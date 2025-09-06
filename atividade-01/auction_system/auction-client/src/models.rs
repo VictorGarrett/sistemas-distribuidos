@@ -13,38 +13,31 @@ pub struct Bid {
     pub valid: bool
 }
 
+
+
 #[derive(Serialize, Deserialize)]
-pub struct Auction{
+pub struct Auction {
     pub id: u32,
     pub item: String,
-    pub created_timestamp: u128,
-    pub end_timestamp: Option<u128>,
-    pub is_active: bool,
+    pub start_timestamp: u128,
+    pub end_timestamp: u128,
+    pub status: bool
 }
 
-impl Auction{
-    pub fn new(id: u32, item: String) -> Self{
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
-        Auction{
+impl Auction {
+    pub fn new(
+        id: u32, 
+        item: String,
+        start_timestamp: u128,
+        end_timestamp: u128
+    ) -> Self {
+        Auction {
             id,
             item,
-            created_timestamp: now,
-            end_timestamp: None,
-            is_active: true,
+            start_timestamp,
+            end_timestamp,
+            status: true
         }
-    }
-    
-    pub fn set_inactive(&mut self){
-        self.is_active = false;
-        self.end_timestamp = Some(
-            SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-        );
     }
 }
 
@@ -101,4 +94,28 @@ pub struct NotificationData{
     auction_id: u32,
     client_id: u32,
     bid_value: f64,
+}
+
+pub enum CliCommand{
+    Subscribe{
+        auction_id: String
+    },
+    MakeBid{
+        auction_id: String,
+        value: f64
+    },
+}
+
+pub enum Destructured {
+    MakeBid(String, f64),
+    Subscribe(String),
+}
+
+impl CliCommand {
+    pub fn destructure(self) -> Option<Destructured> {
+        match self {
+            Self::MakeBid { auction_id, value } => Some(Destructured::MakeBid(auction_id, value)),
+            Self::Subscribe { auction_id } => Some(Destructured::Subscribe(auction_id)),
+        }
+    }
 }
