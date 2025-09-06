@@ -43,7 +43,7 @@ pub async fn task_end_auction(
         println!("Received delivery on leilao_finalizado: {auction_id}");
         let mut auctions = auctions.lock().await;
         if let Some(auction) = auctions.iter_mut().find(|a| a.id == auction_id){
-            auction.is_active = false;
+            auction.status = false;
         }
         drop(auctions); //ensures lock is released before next iteration
 
@@ -198,7 +198,7 @@ fn is_bid_valid(
     public_key: RsaPublicKey
 ) -> bool {
     let auctions = auctions.blocking_lock();
-    let auction_opt = auctions.iter().find(|a| a.id == bid.auction_id && a.is_active);
+    let auction_opt = auctions.iter().find(|a| a.id == bid.auction_id && a.status);
 
     //Auction has ended or does not exist
     if auction_opt.is_none() {

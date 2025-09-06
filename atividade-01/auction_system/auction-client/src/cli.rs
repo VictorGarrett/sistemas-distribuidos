@@ -44,7 +44,7 @@ impl Cli {
             self.draw_ui()?;
             
             // Check for user input or scheduler messages
-            if event::poll(std::time::Duration::from_millis(10))? {
+            if event::poll(std::time::Duration::from_millis(100))? {
                 if let Event::Key(key_event) = event::read()? {
                     if self.handle_key_event(key_event, &make_bid_tx, &subscribe_tx).await {
                         break;

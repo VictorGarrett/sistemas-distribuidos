@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use lapin::options::{QueueBindOptions};
 use tokio::sync::{mpsc::{Receiver, Sender}};
 
@@ -14,17 +13,10 @@ use lapin::{
 };
 use futures_lite::stream::StreamExt;
 use rsa::{
-    RsaPrivateKey,
     Pkcs1v15Sign
 };
 use sha2::{Digest, Sha256};
 
-use crossterm::{
-    cursor,
-    execute,
-    terminal::{Clear, ClearType, enable_raw_mode},
-};
-use std::io::{self, Write};
 use base64::{engine::general_purpose, Engine as _};
 use serde_json;
 use crate::models::{Bid, Client, Notification, NotificationType, Auction};
@@ -38,7 +30,7 @@ use crate::cli::Cli;
 pub async fn task_cli(
     make_bid_tx: Sender<Bid>,
     subscribe_tx: Sender<String>,
-    mut cli_print_rx: Receiver<String>,
+    cli_print_rx: Receiver<String>,
     cli: Cli
 ){
     cli.run(make_bid_tx, subscribe_tx, cli_print_rx).await.unwrap();
@@ -81,24 +73,26 @@ pub async fn task_make_bid(
 ) {
     let channel = conn.create_channel().await.unwrap();
 
-    while let Some(mut bid) = make_bid_rx.recv().await {
+    loop{
+        while let Ok(mut bid) = make_bid_rx.try_recv() {
 
-        let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes();
-    
-        let hashed = Sha256::digest(content);
+            let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes();
+        
+            let hashed = Sha256::digest(content);
 
-        let client = client_mutex.lock().await;
-        // sign
-        let signature = client.private_key.sign(
-            Pkcs1v15Sign::new_unprefixed(),
-            &hashed,
-        ).unwrap();
+            let client = client_mutex.lock().await;
+            // sign
+            let signature = client.private_key.sign(
+                Pkcs1v15Sign::new_unprefixed(),
+                &hashed,
+            ).unwrap();
 
-        bid.signature = general_purpose::STANDARD.encode(signature);
-        bid.public_key = client.public_key.clone();
-        drop(client);
+            bid.signature = general_purpose::STANDARD.encode(signature);
+            bid.public_key = client.public_key.clone();
+            drop(client);
 
-        publish_bid(&channel, &bid).await.unwrap();
+            publish_bid(&channel, &bid).await.unwrap();
+        }
     }
 }
 
@@ -186,7 +180,7 @@ pub async fn task_init_auction(
         
         if let Err(e) = cli_print_tx
             .send(format!(
-                "[AUCTION] id={} item={} active={}",
+                "[AUCTION] id={} item={} active={}\n",
                 auction.id, auction.item, auction.status
             ))
             .await

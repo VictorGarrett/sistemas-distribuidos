@@ -15,9 +15,9 @@ pub struct Bid {
 pub struct Auction{
     pub id: u32,
     pub item: String,
-    pub created_timestamp: u128,
+    pub start_timestamp: u128,
     pub end_timestamp: Option<u128>,
-    pub is_active: bool,
+    pub status: bool,
 }
 
 impl Auction{
@@ -29,14 +29,14 @@ impl Auction{
         Auction{
             id,
             item,
-            created_timestamp: now,
+            start_timestamp: now,
             end_timestamp: None,
-            is_active: true,
+            status: true,
         }
     }
     
     pub fn set_inactive(&mut self){
-        self.is_active = false;
+        self.status = false;
         self.end_timestamp = Some(
             SystemTime::now()
             .duration_since(UNIX_EPOCH)

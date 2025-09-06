@@ -13,11 +13,9 @@ use crate::cli::Cli;
 
 
 use tokio::{sync::Mutex, task::JoinHandle};
-use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
-use rsa::pkcs1::{DecodeRsaPrivateKey, EncodeRsaPublicKey};
-use sha2::{Digest, Sha256};
-use base64::{engine::general_purpose, Engine as _};
-use rsa::Pkcs1v15Sign;
+use rsa::{ RsaPrivateKey};
+use rsa::pkcs1::{DecodeRsaPrivateKey};
+use rsa::pkcs8::EncodePublicKey;
 
 pub mod models;
 
@@ -44,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (started_queue_name, notification_queue_name) = init_rabbitmq_structs(conn.clone()).await?;
 
 
-    // create aaaa 1757163605 1757164999
+    // create aaaa 1757163605 1757169999
 
     //let pem = fs::read_to_string("private_key.pem")?;
     let pem = "-----BEGIN RSA PRIVATE KEY-----
@@ -70,7 +68,7 @@ sdpoIwdgJDlOHWpRethjNiNx7FITofCcsqC/8Mp7
         id: 0,
         subscribed_auctions: Vec::new(),
         private_key: private_key.clone(),
-        public_key: private_key.to_public_key().to_pkcs1_pem(rsa::pkcs8::LineEnding::LF)?.to_string(),
+        public_key: private_key.to_public_key().to_public_key_pem(rsa::pkcs8::LineEnding::LF)?.to_string(),
         notification_queue_name: notification_queue_name.clone(),
     }));
     
