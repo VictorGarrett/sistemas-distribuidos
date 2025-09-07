@@ -174,7 +174,7 @@ async fn init_receive_notification(channel: &Channel) -> Result<String, Box<dyn 
     channel
         .exchange_declare(
             "notificacoes",
-            lapin::ExchangeKind::Direct,
+            lapin::ExchangeKind::Topic,
             ExchangeDeclareOptions::default(),
             FieldTable::default(),
         )
