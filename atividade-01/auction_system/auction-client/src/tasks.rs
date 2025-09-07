@@ -1,7 +1,9 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use lapin::options::{QueueBindOptions};
+use rsa::RsaPublicKey;
 use tokio::sync::{mpsc::{Receiver, Sender}};
+use rsa::pkcs8::DecodePublicKey;
 
 
 use lapin::{
@@ -76,20 +78,35 @@ pub async fn task_make_bid(
     loop{
         while let Ok(mut bid) = make_bid_rx.try_recv() {
 
+            
+
+            let client = client_mutex.lock().await;
+
+            bid.client_id = client.id;
+            
+
             let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes();
         
             let hashed = Sha256::digest(content);
 
-            let client = client_mutex.lock().await;
+            let thing: String = hashed.iter().map(|b| format!("{:02x}", b)).collect();
+            println!("signing->{}:{}:{}\n{}", bid.auction_id, bid.client_id, bid.value, thing);
+
             // sign
             let signature = client.private_key.sign(
                 Pkcs1v15Sign::new_unprefixed(),
                 &hashed,
             ).unwrap();
 
+
             bid.signature = general_purpose::STANDARD.encode(signature);
             bid.public_key = client.public_key.clone();
+
             drop(client);
+
+            let public_key: RsaPublicKey = RsaPublicKey::from_public_key_pem(bid.public_key.as_str()).unwrap();
+            println!("Signature valid: {}", public_key.verify(Pkcs1v15Sign::new_unprefixed(), &hashed, &base64::engine::general_purpose::STANDARD.decode(&bid.signature).unwrap()).is_ok());
+
 
             publish_bid(&channel, &bid).await.unwrap();
         }

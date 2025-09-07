@@ -14,6 +14,8 @@ use rsa::{
     Pkcs1v15Sign
 };
 use sha2::{Digest, Sha256};
+use base64::engine::general_purpose;
+use base64::Engine;
 
 use serde_json;
 
@@ -93,7 +95,7 @@ pub async fn task_validate_bid(
             &auctions,
             &bids,
             public_key
-        );
+        ).await;
         if bid_is_valid {
             let mut bids = bids.lock().await;
             bids.push(bid.clone());
@@ -101,7 +103,7 @@ pub async fn task_validate_bid(
 
             publish_validated_bid(&channel, &bid).await.unwrap();
         } else {
-            println!("Invalid bid signature");
+            println!("Bid was deemed invalid, if nothing else, because of signature verification failure" );
         }
     }
 
@@ -191,40 +193,56 @@ async fn publish_winner_bid(
 
 /*============================================= BID VERIFICATION ============================================= */
 
-fn is_bid_valid(
+async fn is_bid_valid(
     bid: &Bid,
     auctions: &Arc<Mutex<Vec<Auction>>>,
     bids: &Arc<Mutex<Vec<Bid>>>,
     public_key: RsaPublicKey
 ) -> bool {
-    let auctions = auctions.blocking_lock();
+    let auctions = auctions.lock().await;
     let auction_opt = auctions.iter().find(|a| a.id == bid.auction_id && a.status);
 
-    //Auction has ended or does not exist
     if auction_opt.is_none() {
+        println!("Auction not found or inactive, bid invalid");
         return false;
     }
 
-    let bids = bids.blocking_lock();
+    let bids = bids.lock().await;
     let highest_bid_opt = bids
         .iter()
         .filter(|b| b.auction_id == bid.auction_id)
-        .max_by(|a, b| a.value.partial_cmp(&b.value)
-        .unwrap());
+        .max_by(|a, b| a.value.partial_cmp(&b.value).unwrap());
 
     if let Some(highest_bid) = highest_bid_opt {
-        if bid.value <= highest_bid.value {
+        if bid.value <= 0.0{//highest_bid.value {
+            println!("Bid value {} is not higher than current highest bid {}, bid invalid", bid.value, highest_bid.value);
             return false;
         }
     }
+
+    print!("Verifying bid signature... {}", verify_bid(bid, public_key.clone()));
     verify_bid(bid, public_key)
+
 }
 
 fn verify_bid(bid: &Bid, public_key: RsaPublicKey) -> bool {
     let content = format!("{}:{}:{}", bid.auction_id, bid.client_id, bid.value).into_bytes();
     let hashed = Sha256::digest(content);
 
-    public_key.verify(Pkcs1v15Sign::new_unprefixed(), &hashed, bid.signature.as_bytes()).is_ok()
+    let thing: String = hashed.iter().map(|b| format!("{:02x}", b)).collect();
+    println!("verifying->{}:{}:{}\n{}", bid.auction_id, bid.client_id, bid.value, thing);
+
+    let signature_bytes = match general_purpose::STANDARD.decode(&bid.signature) {
+        Ok(sig) => sig,
+        Err(_) => {
+            println!("Failed to decode base64 signature");
+            return false;
+        }
+    };
+
+    public_key
+        .verify(Pkcs1v15Sign::new_unprefixed(), &hashed, &signature_bytes)
+        .is_ok()
 }
 
 /*============================================= BID VERIFICATION - END ============================================= */

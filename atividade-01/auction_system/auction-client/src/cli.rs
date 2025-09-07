@@ -40,7 +40,7 @@ impl Cli {
             while let Ok(message) = cli_print_rx.try_recv() {
                 self.handle_notification(message);
             }
-
+            
             self.draw_ui()?;
             
             // Check for user input or scheduler messages
