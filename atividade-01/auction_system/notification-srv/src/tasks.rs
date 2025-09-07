@@ -69,12 +69,15 @@ async fn publish_to_notification_exc(channel: &Channel, bid: &Bid, notification_
     let payload = serde_json::to_vec(&notification).unwrap();
 
     channel.basic_publish(
-        "notification",
+        "notificacoes",
         routing_key.as_str(),
         BasicPublishOptions::default(), 
         &payload, 
         BasicProperties::default()
     ).await?.await?;
+
+    println!("Published notification to notificacoes using routing key '{}'", routing_key);
+    dbg!(&notification);
 
     Ok(())
 }

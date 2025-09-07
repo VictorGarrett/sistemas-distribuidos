@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Bid {
     pub auction_id: u32,
     pub client_id: u32,
@@ -10,7 +10,7 @@ pub struct Bid {
     pub valid: bool
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Notification{
     notification_type: NotificationType,
     data: NotificationData
@@ -33,13 +33,13 @@ impl Notification{
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum NotificationType{
     NewBid,
     AuctionWinner
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NotificationData{
     auction_id: u32,
     client_id: u32,
