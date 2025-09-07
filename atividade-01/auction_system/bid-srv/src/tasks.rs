@@ -154,14 +154,14 @@ async fn publish_validated_bid(
     channel
         .basic_publish(
             "",
-            "lance_realizado",
+            "lance_validado",
             BasicPublishOptions::default(),
             &payload,
             lapin::BasicProperties::default(),
         )
         .await?
         .await?;
-    println!("Published Validated bid on lance_realizado");
+    println!("Published Validated bid on lance_validado");
     dbg!(bid);
 
     Ok(())

@@ -87,6 +87,7 @@ async fn init_rabbitmq_structs(conn: Arc<Connection>) -> Result<String, Box<dyn 
     init_lance_realizado(&channel).await?;
     init_leilao_vencedor(&channel).await?;
     init_leilao_finalizado(&channel).await?;
+    init_lance_validado(&channel).await?;
 
     Ok(fo_queue)
 }
@@ -110,6 +111,17 @@ async fn init_lance_realizado(channel: &Channel) -> Result<(), Box<dyn std::erro
 
     Ok(())
 }
+
+async fn init_lance_validado(channel: &Channel) -> Result<(), Box<dyn std::error::Error>>{
+    channel.queue_declare(
+        "lance_validado",
+        QueueDeclareOptions::default(), 
+        FieldTable::default(),
+    ).await?;
+
+    Ok(())
+}
+
 
 async fn init_leilao_iniciado(channel: &Channel) -> Result<String, Box<dyn std::error::Error>>{
     channel.exchange_declare(
