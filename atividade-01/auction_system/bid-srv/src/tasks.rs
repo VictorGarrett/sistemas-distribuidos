@@ -214,7 +214,7 @@ async fn is_bid_valid(
         .max_by(|a, b| a.value.partial_cmp(&b.value).unwrap());
 
     if let Some(highest_bid) = highest_bid_opt {
-        if bid.value <= 0.0{//highest_bid.value {
+        if bid.value <= highest_bid.value {
             println!("Bid value {} is not higher than current highest bid {}, bid invalid", bid.value, highest_bid.value);
             return false;
         }

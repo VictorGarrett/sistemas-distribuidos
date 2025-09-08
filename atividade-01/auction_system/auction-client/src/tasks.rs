@@ -3,6 +3,7 @@ use lapin::options::{QueueBindOptions};
 use rsa::RsaPublicKey;
 use tokio::sync::{mpsc::{Receiver, Sender}};
 use rsa::pkcs8::DecodePublicKey;
+use chrono::{Local, TimeZone};
 
 
 use lapin::{
@@ -191,13 +192,18 @@ pub async fn task_init_auction(
         
         if let Err(e) = cli_print_tx
             .send(format!(
-                "[AUCTION] id={} item={} active={}\n",
-                auction.id, auction.item, auction.status
+                "[AUCTION] New auction for {} started now ({}) with ID {}. Auction ends at {}.\n",
+                auction.item,
+                chrono::Local.timestamp_opt((auction.start_timestamp / 1000).try_into().unwrap(), 0).unwrap().format("%d/%m/%Y %H:%M:%S"),
+                auction.id,
+                chrono::Local.timestamp_opt((auction.end_timestamp / 1000).try_into().unwrap(), 0).unwrap().format("%d/%m/%Y %H:%M:%S")
             ))
             .await
         {
             eprintln!("Failed to send auction message to CLI: {}", e);
         }
+
+
 
     }
 
