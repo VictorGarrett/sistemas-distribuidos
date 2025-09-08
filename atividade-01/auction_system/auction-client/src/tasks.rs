@@ -48,6 +48,10 @@ pub async fn task_subscribe(
     let channel = conn.create_channel().await.unwrap();
 
     while let Some(auction_id) = subscribe_rx.recv().await {
+        if let Some(_) = client.subscribed_auctions.iter().find(|&&a| a == auction_id){
+            continue;
+        }
+        
         client.subscribed_auctions.push(auction_id);
         let routing_key = format!("leilao_{}", auction_id);
         
