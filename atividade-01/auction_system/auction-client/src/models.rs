@@ -1,3 +1,5 @@
+use std::ops::SubAssign;
+
 use serde::{Serialize, Deserialize};
 use rsa::{ RsaPrivateKey};
 
@@ -104,6 +106,15 @@ pub enum CliCommand{
         auction_id: u32,
         value: f64
     },
+}
+
+impl CliCommand{
+    pub fn get_auction_id(&self) -> u32{
+        match self{
+            Self::Subscribe { auction_id } => *auction_id,
+            Self::MakeBid { auction_id, .. } => *auction_id
+        }
+    }
 }
 
 pub enum Destructured {

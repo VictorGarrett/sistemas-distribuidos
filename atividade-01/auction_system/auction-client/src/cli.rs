@@ -226,12 +226,10 @@ impl Cli {
     }
 
     async fn send_subscribe(&mut self, cmd: CliCommand, subscribe_tx: &Sender<u32>){
-        if let Some(Destructured::Subscribe(auction_id)) = cmd.destructure() {
-            subscribe_tx
-                .send(auction_id)
-                .await
-                .unwrap();
-        }
-
+        let auction_id = cmd.get_auction_id();
+        subscribe_tx
+            .send(auction_id)
+            .await
+            .unwrap();
     }
 }
