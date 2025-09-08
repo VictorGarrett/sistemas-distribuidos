@@ -10,7 +10,7 @@ use lapin::types::FieldTable;
 use std::sync::Arc;
 use crate::cli::Cli;
 
-
+use std::{env, fs};
 
 use tokio::{task::JoinHandle};
 use rsa::{ RsaPrivateKey};
@@ -34,6 +34,14 @@ pub mod cli;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 3 {
+        eprintln!("Usage: {} <client_id> <private_key_path>", args[0]);
+        std::process::exit(1);
+    }
+    let client_id: u32 = args[1].parse()?;
+    let private_key_path = &args[2];
+
     let addr = "amqp://guest:guest@127.0.0.1:5672/%2f";
     let conn = Connection::connect(addr, ConnectionProperties::default()).await?;
     println!("Consumer connected to RabbitMQ!");
@@ -41,33 +49,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (started_queue_name, notification_queue_name) = init_rabbitmq_structs(conn.clone()).await?;
 
-
-    // create aaaa 1757163605 1757189999
-
-    //let pem = fs::read_to_string("private_key.pem")?;
-    let pem = "-----BEGIN RSA PRIVATE KEY-----
-MIICWgIBAAKBgGmcA0BGDhveEY6+dmEo1lil2NpB0Y8NpXdpBUi5DZLbk9Sg/sTv
-8z/AURr99a7MKAVFFngHTioOwxB5ruwhdvuFKKyqTnzYK2dv87WJ7GqqUda2rlhB
-my4CCOXSS+YLqgdQYj4QesBDOC9ojdFaIPGIyp77J4iHAoICxN+y+Rn9AgMBAAEC
-gYAarXFYzBmGSptuzogC1RkIPaTAxX2VQGI6/sl57F0Uauk1/hE9WEu/H+qdAegM
-5r95TVF2som5MA9wWvyn43A1l+zjuHYZIZZTNguhbDZ+oFEWFxERzzqe1EF+DQ25
-n4vV9H2Iww2KdbyC8RuabK/QRqeTBH+JNOw5Ng84Hkbg9QJBAKxSpaPsHeHR+r/Y
-vqiuTqnzxp6WKkoJ5t+w6ZmCLisoAUpyjZcMKJfdditf1ypCL5CpbMxV/Dh0Wt8E
-bvo2lwsCQQCc5EJqTCP9LVs9Pn4UoSQLoR9K39zu4sE0rbXyXsLx2dlb992ednCm
-f89vZZ9hVaR5EUn+51s34QUxUnXdCZgXAkBeoniy4B29AUr6hraV/jvXG7hNKVyK
-EowG9qojEpn2O18SGnzlodi9JfMaeOS6IWTrxg+o2+PKwSOSbGXh5Y7nAkA+ywTh
-8nN9A0g/LOHdc9kvZl9V4l9UpSDa6qOly9OOZLigHIZww8q2ePUXCr9Nf6+CXS8W
-fJZ/uOoRIYXW394lAkA89SZ9iU/6GkTG6z5hzENPfiuiPGV3Ytp+TgbDxprVhGrv
-sdpoIwdgJDlOHWpRethjNiNx7FITofCcsqC/8Mp7
------END RSA PRIVATE KEY-----";
-    let private_key = RsaPrivateKey::from_pkcs1_pem(pem)?;
-
+    // Load the private key from the specified file
+    let pem = fs::read_to_string(private_key_path)?;
+    let private_key = RsaPrivateKey::from_pkcs1_pem(&pem)?;
 
     let client = Client {
-        id: 0,
+        id: client_id,
         subscribed_auctions: Vec::new(),
         private_key: private_key.clone(),
-        public_key: private_key.to_public_key().to_public_key_pem(rsa::pkcs8::LineEnding::LF)?.to_string(),
+        public_key: private_key
+            .to_public_key()
+            .to_public_key_pem(rsa::pkcs8::LineEnding::LF)?
+            .to_string(),
         notification_queue_name: notification_queue_name.clone(),
     };
     
