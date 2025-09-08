@@ -12,7 +12,7 @@ use crate::cli::Cli;
 
 
 
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::{task::JoinHandle};
 use rsa::{ RsaPrivateKey};
 use rsa::pkcs1::{DecodeRsaPrivateKey};
 use rsa::pkcs8::EncodePublicKey;
@@ -63,16 +63,19 @@ sdpoIwdgJDlOHWpRethjNiNx7FITofCcsqC/8Mp7
     let private_key = RsaPrivateKey::from_pkcs1_pem(pem)?;
 
 
-    let client = 
-    Arc::new(Mutex::new(Client {
+    let client = Client {
         id: 0,
         subscribed_auctions: Vec::new(),
         private_key: private_key.clone(),
         public_key: private_key.to_public_key().to_public_key_pem(rsa::pkcs8::LineEnding::LF)?.to_string(),
         notification_queue_name: notification_queue_name.clone(),
-    }));
+    };
     
-    let handles = init_tasks(conn, started_queue_name, client);
+    let handles = init_tasks(
+        conn, 
+        started_queue_name, 
+        client
+    );
 
         
 
@@ -86,43 +89,47 @@ sdpoIwdgJDlOHWpRethjNiNx7FITofCcsqC/8Mp7
 fn init_tasks(
     conn: Arc<Connection>,
     started_queue_name: String,
-    client_mutex: Arc<Mutex<Client>>,
+    client: Client,
 ) -> Vec<JoinHandle<()>> {
     let mut handles = Vec::new();
 
     let (make_bid_tx, make_bid_rx) = mpsc::channel::<Bid>(20);
-    let (subscribe_tx, subscribe_rx) = mpsc::channel::<String>(20);
-    let (cli_print_tx, cli_print_rx) = mpsc::channel::<String>(20);
+    let (subscribe_tx, subscribe_rx) = mpsc::channel::<u32>(20);
+    let (cli_print_tx, cli_print_rx) = mpsc::channel::<String>(100);
     let cli = Cli::new();
+
+    let client_static = Arc::new(client.clone());
 
     handles.push(tokio::spawn(task_init_auction(
         conn.clone(),
         started_queue_name,
-        client_mutex.clone(),
+        client_static.clone(),
         cli_print_tx.clone()
     )));
 
     handles.push(tokio::spawn(task_receive_notification(
         conn.clone(),
-        client_mutex.clone(),
-        cli_print_tx
+        client_static.clone(),
+        cli_print_tx.clone()
     )));
 
     handles.push(tokio::spawn(task_subscribe(
         conn.clone(),
-        client_mutex.clone(),
+        client,
+        cli_print_tx,
         subscribe_rx,
     )));
 
     handles.push(tokio::spawn(task_make_bid(
         conn.clone(),
-        client_mutex.clone(),
+        client_static.clone(),
         make_bid_rx
     )));
 
-    handles.push(tokio::spawn(
-        task_cli(make_bid_tx, subscribe_tx, cli_print_rx, cli)
-    ));
+    handles.push(tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(task_cli(make_bid_tx, subscribe_tx, cli_print_rx, cli))
+    }));
 
 
     handles

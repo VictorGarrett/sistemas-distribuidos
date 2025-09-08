@@ -28,7 +28,7 @@ impl Cli {
     pub async fn run(
         mut self,
         make_bid_tx: Sender<Bid>,
-        subscribe_tx: Sender<String>,
+        subscribe_tx: Sender<u32>,
         mut cli_print_rx: Receiver<String>
     ) -> io::Result<()> {
         enable_raw_mode()?;
@@ -60,7 +60,6 @@ impl Cli {
     
     fn draw_ui(&self) -> io::Result<()> {
         // Debugging: Print a message to indicate the UI is being drawn
-        eprintln!("Drawing UI...");
         // Clear screen and set cursor position
         execute!(stdout(), crossterm::terminal::Clear(crossterm::terminal::ClearType::All))?;
         
@@ -94,7 +93,7 @@ impl Cli {
         &mut self,
         key_event: KeyEvent,
         make_bid_tx: &Sender<Bid>,
-        subscribe_tx: &Sender<String>,
+        subscribe_tx: &Sender<u32>,
     ) -> bool {
         match key_event {
             KeyEvent {
@@ -117,7 +116,10 @@ impl Cli {
                     match self.parse_command(command){
                         Ok(cmd)=>{
                             match cmd {
-                                CliCommand::MakeBid {..} => self.send_make_bid(cmd, make_bid_tx).await,
+                                CliCommand::MakeBid {..} => {
+                                    self.send_subscribe(cmd, subscribe_tx).await;
+                                    self.send_make_bid(cmd, make_bid_tx).await;
+                                },
                                 CliCommand::Subscribe {..} => self.send_subscribe(cmd, subscribe_tx).await,
                             }
                         },
@@ -170,17 +172,22 @@ impl Cli {
             .collect();
         
         match parts.as_slice() {
-            ["subscribe", auction_id] => {
-                Ok(CliCommand::Subscribe { 
-                    auction_id: auction_id.to_string(), 
+            ["subscribe", auction_id] => {  
+                let auction_id = auction_id.parse::<u32>()
+                    .map_err(|_| "Invalid value: must be a positive integer".to_string())?;
+
+                Ok(CliCommand::Subscribe {
+                    auction_id,
                 })
             },
             ["bid", auction_id, value] => {
                 let value = value.parse::<f64>()
                     .map_err(|_| "Invalid value: must be a number".to_string())?;
+                let auction_id = auction_id.parse::<u32>()
+                    .map_err(|_| "Invalid value: must be a positive integer".to_string())?;
         
                 Ok(CliCommand::MakeBid { 
-                    auction_id: auction_id.to_string(), 
+                    auction_id: auction_id, 
                     value, 
                 })
             },
@@ -198,7 +205,7 @@ impl Cli {
             match destructured {
                 Destructured::MakeBid(auction_id, value) => {
                     let bid = Bid{
-                        auction_id: auction_id.parse().unwrap_or(0), // assuming auction_id is a numeric string
+                        auction_id: auction_id, // assuming auction_id is a numeric string
                         client_id: 0,
                         value: value, // already f64, no need to parse
                         signature: "aaa".to_string(),
@@ -218,7 +225,7 @@ impl Cli {
 
     }
 
-    async fn send_subscribe(&mut self, cmd: CliCommand, subscribe_tx: &Sender<String>){
+    async fn send_subscribe(&mut self, cmd: CliCommand, subscribe_tx: &Sender<u32>){
         if let Some(Destructured::Subscribe(auction_id)) = cmd.destructure() {
             subscribe_tx
                 .send(auction_id)

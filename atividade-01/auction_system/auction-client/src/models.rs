@@ -40,6 +40,7 @@ impl Auction {
     }
 }
 
+#[derive(Clone)]
 pub struct Client{
     pub id: u32,
     pub subscribed_auctions: Vec<u32>,
@@ -47,7 +48,6 @@ pub struct Client{
     pub public_key: String,
     pub notification_queue_name: String,
 }
-
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Notification{
@@ -95,19 +95,20 @@ pub struct NotificationData{
     bid_value: f64,
 }
 
+#[derive(Clone, Copy)]
 pub enum CliCommand{
     Subscribe{
-        auction_id: String
+        auction_id: u32
     },
     MakeBid{
-        auction_id: String,
+        auction_id: u32,
         value: f64
     },
 }
 
 pub enum Destructured {
-    MakeBid(String, f64),
-    Subscribe(String),
+    MakeBid(u32, f64),
+    Subscribe(u32),
 }
 
 impl CliCommand {
@@ -118,3 +119,4 @@ impl CliCommand {
         }
     }
 }
+
