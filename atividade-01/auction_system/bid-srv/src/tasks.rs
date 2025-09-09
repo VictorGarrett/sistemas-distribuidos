@@ -16,7 +16,7 @@ use rsa::{
 use sha2::{Digest, Sha256};
 use base64::engine::general_purpose;
 use base64::Engine;
-
+use std::{fs, path::Path};
 use serde_json;
 
 use crate::models::*;
@@ -81,6 +81,8 @@ pub async fn task_validate_bid(
         FieldTable::default()
     ).await.unwrap();
 
+    let public_keys = load_public_keys_vec("bid-srv/keys").unwrap();
+
     while let Some(delivery) = consumer.next().await {
         let delivery = delivery.unwrap();
         delivery.ack(Default::default()).await.unwrap();
@@ -89,7 +91,8 @@ pub async fn task_validate_bid(
         println!("Received delivery on lance_realizado");
         dbg!(&bid);
 
-        let public_key = RsaPublicKey::from_public_key_pem(bid.public_key.as_str()).unwrap();
+        //let public_key = RsaPublicKey::from_public_key_pem(bid.public_key.as_str()).unwrap();
+        let public_key = public_keys.get(bid.client_id as usize).unwrap().clone().unwrap();
         let bid_is_valid = is_bid_valid(
             &bid,
             &auctions,
@@ -142,7 +145,30 @@ pub async fn task_init_auction(
 
 
 /*====================================================== AUX ====================================================== */
+fn load_public_keys_vec<P: AsRef<Path>>(folder: P) -> std::io::Result<Vec<Option<RsaPublicKey>>> {
+    let mut keys = Vec::new();
 
+    for entry in fs::read_dir(folder)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+            if let Some(id_str) = filename.strip_prefix("client_") {
+                if let Ok(id) = id_str.parse::<usize>() {
+                    let pem = fs::read_to_string(&path)?;
+                    if let Ok(pub_key) = RsaPublicKey::from_public_key_pem(&pem) {
+                        if id >= keys.len() {
+                            keys.resize(id + 1, None);
+                        }
+                        keys[id] = Some(pub_key);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(keys)
+}
 /*============================================= PUBLISH ============================================= */
 
 
