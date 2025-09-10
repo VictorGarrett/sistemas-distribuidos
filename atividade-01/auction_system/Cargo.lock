@@ -545,22 +545,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
-name = "consumer"
-version = "0.1.0"
-dependencies = [
- "base64 0.21.7",
- "futures-lite",
- "lapin",
- "pkcs8",
- "rand 0.8.5",
- "rsa",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
-]
-
-[[package]]
 name = "convert_case"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1632,22 +1616,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89ae43fd86e4158d6db51ad8e2b80f313af9cc74f5c0e03ccb87de09998732de"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "publisher"
-version = "0.1.0"
-dependencies = [
- "base64 0.21.7",
- "futures-lite",
- "lapin",
- "pkcs8",
- "rand 0.8.5",
- "rsa",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
 ]
 
 [[package]]

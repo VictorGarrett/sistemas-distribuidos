@@ -1,7 +1,5 @@
 [workspace]
 members = [
-    "publisher",
-    "consumer",
     "auction-srv",
     "notification-srv", 
     "bid-srv",
