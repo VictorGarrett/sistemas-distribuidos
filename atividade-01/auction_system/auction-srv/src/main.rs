@@ -2,7 +2,7 @@ use lapin::{
     options::{ExchangeDeclareOptions, QueueDeclareOptions}, types::FieldTable, Connection, ConnectionProperties
 };
 
-use tokio::task::JoinHandle;
+use tokio::task::{spawn_blocking, JoinHandle};
 use std::{error::Error, time::{SystemTime, UNIX_EPOCH}};
 use tokio::sync::mpsc;
 use std::sync::Arc;
@@ -85,9 +85,12 @@ fn init_tasks(
         )
     ));
 
-    handles.push(tokio::spawn(
-        task_cli(new_auction_tx, cli)
-    ));
+    handles.push(spawn_blocking(move ||{
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(
+            task_cli(new_auction_tx, cli)
+        )
+    }));
 
     handles
     

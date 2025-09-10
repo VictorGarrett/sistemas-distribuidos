@@ -2,33 +2,46 @@ use lapin::options::{QueueDeclareOptions, QueueBindOptions, ExchangeDeclareOptio
 use lapin::{
     Channel, Connection, ConnectionProperties
 };
+use tokio::sync::mpsc;
+
+
 use lapin::types::FieldTable;
 
 use std::sync::Arc;
+use crate::cli::Cli;
 
+use std::{env, fs};
 
-use tokio::{sync::Mutex, task::JoinHandle};
-
-use futures_lite::stream::StreamExt;
-use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
-use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
-use sha2::{Digest, Sha256};
-use base64::{engine::general_purpose, Engine as _};
-use rsa::Pkcs1v15Sign;
+use tokio::{task::JoinHandle};
+use rsa::{ RsaPrivateKey};
+use rsa::pkcs1::{DecodeRsaPrivateKey};
+use rsa::pkcs8::EncodePublicKey;
 
 pub mod models;
 
-use crate::bid::Bid;
+use crate::models::*;
 
 pub mod tasks;
 use crate::tasks::{
     task_init_auction,
     task_receive_notification,
-    task_process_input
+    task_make_bid,
+    task_subscribe,
+    task_cli
 };
+pub mod cli;
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 3 {
+        eprintln!("Usage: {} <client_id> <private_key_path>", args[0]);
+        std::process::exit(1);
+    }
+    let client_id: u32 = args[1].parse()?;
+    let private_key_path = &args[2];
+
     let addr = "amqp://guest:guest@127.0.0.1:5672/%2f";
     let conn = Connection::connect(addr, ConnectionProperties::default()).await?;
     println!("Consumer connected to RabbitMQ!");
@@ -36,26 +49,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (started_queue_name, notification_queue_name) = init_rabbitmq_structs(conn.clone()).await?;
 
+    // Load the private key from the specified file
+    let pem = fs::read_to_string(private_key_path)?;
+    let private_key = RsaPrivateKey::from_pkcs1_pem(&pem)?;
 
-
-    let pem = fs::read_to_string("private_key.pem")?;
-    let private_key = RsaPrivateKey::from_pkcs1_pem(pem)?;
-
-
-    init_tasks(conn, started_queue_name, notification_queue_name);
+    let client = Client {
+        id: client_id,
+        subscribed_auctions: Vec::new(),
+        private_key: private_key.clone(),
+        public_key: private_key
+            .to_public_key()
+            .to_public_key_pem(rsa::pkcs8::LineEnding::LF)?
+            .to_string(),
+        notification_queue_name: notification_queue_name.clone(),
+    };
+    
+    let handles = init_tasks(
+        conn, 
+        started_queue_name, 
+        client
+    );
 
         
 
-    
-    
-    
-        
-
-    
-    
-
-    println!("Waiting for messages...");
-
+    for handle in handles {
+        handle.await?;
+    }
 
     Ok(())
 }
@@ -63,20 +82,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn init_tasks(
     conn: Arc<Connection>,
     started_queue_name: String,
-    notification_queue_name: String
+    client: Client,
 ) -> Vec<JoinHandle<()>> {
     let mut handles = Vec::new();
 
+    let (make_bid_tx, make_bid_rx) = mpsc::channel::<Bid>(20);
+    let (subscribe_tx, subscribe_rx) = mpsc::channel::<u32>(20);
+    let (cli_print_tx, cli_print_rx) = mpsc::channel::<String>(100);
+    let cli = Cli::new();
+
+    let client_static = Arc::new(client.clone());
+
     handles.push(tokio::spawn(task_init_auction(
         conn.clone(),
-        started_queue_name
+        started_queue_name,
+        client_static.clone(),
+        cli_print_tx.clone()
     )));
 
     handles.push(tokio::spawn(task_receive_notification(
+        conn.clone(),
+        client_static.clone(),
+        cli_print_tx.clone()
     )));
 
-    handles.push(tokio::spawn(task_process_input(
+    handles.push(tokio::spawn(task_subscribe(
+        conn.clone(),
+        client,
+        cli_print_tx,
+        subscribe_rx,
     )));
+
+    handles.push(tokio::spawn(task_make_bid(
+        conn.clone(),
+        client_static.clone(),
+        make_bid_rx
+    )));
+
+    handles.push(tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(task_cli(make_bid_tx, subscribe_tx, cli_print_rx, cli))
+    }));
 
 
     handles
@@ -128,7 +174,7 @@ async fn init_receive_notification(channel: &Channel) -> Result<String, Box<dyn 
     channel
         .exchange_declare(
             "notificacoes",
-            lapin::ExchangeKind::Direct,
+            lapin::ExchangeKind::Topic,
             ExchangeDeclareOptions::default(),
             FieldTable::default(),
         )
@@ -162,33 +208,3 @@ async fn init_process_input(channel: &Channel) -> Result<(), Box<dyn std::error:
 }
 
 
-// make and publish a bid
-async fn make_bid(auction_id: u32, client_id: u32, value: f64, bid_queue: &lapin::Queue, private_key: &RsaPrivateKey) -> Bid {
-    
-    let content = format!("{}:{}:{}", auction_id, client_id, value).into_bytes();
-    
-    let hashed = Sha256::digest(content);
-
-    // sign
-    let signature = private_key.sign(
-        Pkcs1v15Sign::new_unprefixed(),
-        &hashed,
-    )?;
-    
-    let bid = Bid {
-        aution_id,
-        client_id,
-        value,
-        signature: general_purpose::STANDARD.encode(signature)
-    };
-
-    let payload = json!(bid).to_string();
-
-    channel.basic_publish(
-        "",
-        "lance_realizado",
-        BasicPublishOptions::default(),
-        payload.as_bytes(),
-        BasicProperties::default()
-    ).await?.await?;
-}
