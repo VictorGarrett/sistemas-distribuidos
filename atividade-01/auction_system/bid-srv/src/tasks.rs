@@ -19,7 +19,10 @@ use base64::Engine;
 use std::{fs, path::Path};
 use serde_json;
 
-use crate::models::*;
+use shared::models::{
+    Auction,
+    Bid
+};
 
 /*==================================================== TASKS  ====================================================*/
 

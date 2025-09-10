@@ -7,7 +7,8 @@ use std::{io::{self, stdout, Write}};
 
 use tokio::sync::mpsc::{Sender};
 
-use crate::models::{Auction, CliCommand};
+use shared::models::Auction;
+use crate::models::CliCommand;
 pub struct Cli {
     command_input: String,
     messages: Vec<String>,
@@ -186,7 +187,7 @@ impl Cli {
     }
 
     async fn send_new_auction(&mut self, cmd: CliCommand, new_auction_tx: &Sender<Auction>){
-        let new_auction = Auction::from_cmd(cmd, self.auctions.len() as u32).unwrap();
+        let new_auction = cmd.to_auction(self.auctions.len() as u32  + 1).unwrap();
         self.auctions.push(new_auction.clone());
         
         new_auction_tx

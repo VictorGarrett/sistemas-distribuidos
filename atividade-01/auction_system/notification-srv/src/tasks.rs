@@ -2,7 +2,7 @@ use futures_lite::StreamExt;
 use lapin::{options::{BasicAckOptions, BasicConsumeOptions, BasicPublishOptions}, types::FieldTable, BasicProperties, Channel, Connection};
 use std::{error::Error, sync::Arc};
 
-use crate::models::{Bid, Notification, NotificationType};
+use shared::models::{Bid, Notification, NotificationType};
 
 
 

@@ -11,7 +11,6 @@ use lapin::{
 use tokio::task::JoinHandle;
 use std::{error::Error, sync::Arc};
 
-pub mod models;
 mod tasks;
 
 use crate::tasks::{

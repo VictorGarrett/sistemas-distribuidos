@@ -5,5 +5,8 @@ members = [
     "auction-srv",
     "notification-srv", 
     "bid-srv",
-    "auction-client"
-, "shared"]
+    "auction-client", 
+    "shared"
+]
+
+resolver = "2"

@@ -7,7 +7,8 @@ use std::{io::{self, stdout, Write}};
 
 use tokio::sync::mpsc::{Sender, Receiver};
 
-use crate::models::{Bid, CliCommand, Destructured};
+use crate::models::{CliCommand, Destructured};
+use shared::models::Bid;
 
 
 pub struct Cli {

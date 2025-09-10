@@ -8,13 +8,16 @@ use tokio::{sync::Mutex, task::JoinHandle};
 use lapin::options::{QueueDeclareOptions, QueueBindOptions, ExchangeDeclareOptions};
 use lapin::types::FieldTable;
 use lapin::ExchangeKind;
+use shared::models::{
+    Auction,
+    Bid
+};
 
 
-pub mod models;
+
 pub mod tasks;
 pub mod constants;
 
-use crate::models::*;
 use crate::tasks::{
     task_validate_bid,
     task_end_auction,

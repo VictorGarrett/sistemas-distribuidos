@@ -19,7 +19,11 @@ use rsa::pkcs8::EncodePublicKey;
 
 pub mod models;
 
-use crate::models::*;
+use crate::models::{
+    Client
+};
+
+use shared::models::Bid;
 
 pub mod tasks;
 use crate::tasks::{

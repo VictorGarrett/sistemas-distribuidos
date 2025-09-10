@@ -3,7 +3,9 @@ use lapin::{options::BasicPublishOptions, BasicProperties, Connection};
 
 use std::{sync::Arc, time::{Duration, SystemTime}};
 
-use crate::models::Auction;
+use shared::models::{
+    Auction
+};
 use crate::cli::Cli;
 
 pub async fn task_cli(

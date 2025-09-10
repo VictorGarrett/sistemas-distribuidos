@@ -3,7 +3,7 @@ use lapin::options::{QueueBindOptions};
 use rsa::RsaPublicKey;
 use tokio::sync::{mpsc::{Receiver, Sender}};
 use rsa::pkcs8::DecodePublicKey;
-use chrono::{Local, TimeZone};
+use chrono::{TimeZone};
 
 
 use lapin::{
@@ -21,7 +21,13 @@ use sha2::{Digest, Sha256};
 
 use base64::{engine::general_purpose, Engine as _};
 use serde_json;
-use crate::models::{Bid, Client, Notification, NotificationType, Auction};
+use shared::models::{
+    Bid, 
+    Notification,
+    NotificationType,
+    Auction,
+};
+use crate::models::Client;
 use crate::cli::Cli;
 
 
@@ -188,7 +194,7 @@ pub async fn task_init_auction(
         let delivery = delivery.unwrap();
         delivery.ack(Default::default()).await.unwrap();
 
-        let auction:Auction = serde_json::from_slice(&delivery.data).unwrap();
+        let auction: Auction = serde_json::from_slice(&delivery.data).unwrap();
         
         if let Err(e) = cli_print_tx
             .send(format!(
