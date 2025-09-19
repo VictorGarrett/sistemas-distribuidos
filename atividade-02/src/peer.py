@@ -74,7 +74,7 @@ class Peer:
                     self.request_queue.remove(req)
                 
             elif self.state == 'WANTED':
-                while not self.confirmed:
+                while not self.permissions.all_granted():
                     time.sleep(1)
                 self.state = 'HELD'
             elif self.state == 'HELD':
