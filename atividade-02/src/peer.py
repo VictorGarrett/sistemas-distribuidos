@@ -60,7 +60,7 @@ class Peer:
     def get_state(self):
         return self.state
 
-    def send_confirmation(self, req):
+    def send_response(self, req, granted):
         # send confirmation to the requesting peer (TODO)
         pass
 
@@ -79,14 +79,10 @@ class Peer:
        self.request_queue.append(req)
     
     @Pyro5.api.expose
-    def receive_confirmation(self, peer_id):
-        self.permissions.give_permission(peer_id)
+    def receive_response(self, peer_id, granted):
         self.permissions.set_alive(peer_id)
-
-    @Pyro5.api.expose
-    def receive_denial(self, peer_id):
-        self.permissions.set_alive(peer_id)
-    
+        if granted:
+            self.permissions.give_permission(peer_id)
     
 
     def run(self):
