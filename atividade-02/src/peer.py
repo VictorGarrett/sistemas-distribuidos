@@ -1,4 +1,5 @@
 import Pyro5.api
+import Pyro5
 import threading
 import time
 
@@ -6,6 +7,7 @@ class Permissions:
     def __init__(self):
         self.peers = {}
         self.permissions = {}
+        self.alive = {} 
 
     def add_peer(self, peer_id, host, port):
         self.peers[peer_id] = (host, port)
@@ -14,13 +16,21 @@ class Permissions:
         if peer_id in self.peers:
             del self.peers[peer_id]
             del self.permissions[peer_id]
+            del self.alive[peer_id]
     
     def give_permission(self, peer_id):
         self.permissions[peer_id] = True
+
+    def check_alive(self, peer_id):
+        return (time.now() - self.alive[peer_id]) < 10
+    
+    def set_alive(self, peer_id):
+        self.alive[peer_id] = time.now()
     
     def reset(self):
         for peer_id in self.permissions:
             self.permissions[peer_id] = False
+            self.alive[peer_id] = time.now()
     
     def all_granted(self):
         return all(self.permissions.values())
@@ -56,12 +66,21 @@ class Peer:
     # Pyro interface for remote peers -----------------------------------
 
     @Pyro5.api.expose
+    def receive_heartbeat(self, peer_id):
+        self.permissions.set_alive(peer_id)
+
+    @Pyro5.api.expose
     def receive_request(self, req):
        self.request_queue.append(req)
     
     @Pyro5.api.expose
     def receive_confirmation(self, peer_id):
         self.permissions.give_permission(peer_id)
+        self.permissions.set_alive(peer_id)
+
+    @Pyro5.api.expose
+    def receive_denial(self, peer_id):
+        self.permissions.set_alive(peer_id)
     
     
 
@@ -100,9 +119,11 @@ def main(peer):
 
 if __name__ == "__main__":
 
-    peer = Peer("localhost", 8888)
+    Pyro5.nameserver.NameServer.start_ns()
 
-    pyro_thread = threading.Thread(target=run_pyro_server, args=(peer), daemon=True)
-    pyro_thread.start()
+    #peer = Peer("localhost", 8888)
 
-    main()
+    #pyro_thread = threading.Thread(target=run_pyro_server, args=(peer), daemon=True)
+    #pyro_thread.start()
+
+    #main()
