@@ -26,6 +26,11 @@ class Permissions:
     
     def set_alive(self, peer_id):
         self.alive[peer_id] = time.now()
+
+    def remove_dead_peers(self):
+        for peer_id in list(self.peers.keys()):
+            if not self.check_alive(peer_id):
+                self.remove_peer(peer_id)
     
     def reset(self):
         for peer_id in self.permissions:
@@ -84,7 +89,9 @@ class Peer:
     
     
 
-    async def run(self):
+    def run(self):
+
+        self.permissions.remove_dead_peers()
 
         while True:
             if self.state == 'RELEASED':
@@ -93,9 +100,10 @@ class Peer:
                     self.request_queue.remove(req)
                 
             elif self.state == 'WANTED':
-                while not self.permissions.all_granted():
+                if not self.permissions.all_granted():
+                    self.state = 'HELD'
+                else:
                     time.sleep(1)
-                self.state = 'HELD'
             elif self.state == 'HELD':
                 print("Using thing...")
                 time.sleep(5)
