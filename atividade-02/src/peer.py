@@ -47,12 +47,22 @@ class Peer:
     def __init__(self, id, host, port):
         self.host = host
         self.port = port
-        self.reader = None
-        self.writer = None
         self.state = 'RELEASED'
+        self.ns = Pyro5.api.locate_ns()
         self.id = id
         self.request_queue = []
         self.permissions = Permissions()
+
+        peers = {}
+        peer_uris = self.ns.list(prefix="peer.")
+        for name, uri in peer_uris.items():
+            if name != f"peer.{self.id}":
+                peers[name] = Pyro5.api.Proxy(uri)
+        
+        print(f"Discovered peers: {list(peers.keys())}")
+        for p_name, p_proxy in peers.items():
+            p_proxy.receive_join(self.id, self.host, self.port)
+
 
     def get_host(self):
         return self.host
@@ -84,6 +94,9 @@ class Peer:
         self.permissions.set_alive(peer_id)
         if granted:
             self.permissions.give_permission(peer_id)
+    @Pyro5.api.expose
+    def receive_join(self, peer_id, host, port):
+        self.permissions.add_peer(peer_id, host, port)
     
 
     def run(self):
@@ -148,15 +161,17 @@ def main(peer):
 
 if __name__ == "__main__":
 
-    if len(sys.argv) < 2:
-        print("Usage: python peer.py <peer_id>")
+    if len(sys.argv) < 4:
+        print("Usage: python peer.py <peer_id> <peer_host> <peer_port>")
         sys.exit(1) # Exit the program with an error code
 
     try:
         # Get the ID from the command-line arguments and convert it to an integer
         peer_id = int(sys.argv[1])
+        peer_host = sys.argv[2]
+        peer_port = int(sys.argv[3])
     except ValueError:
-        print("Error: The peer ID must be a valid integer.")
+        print("Error: The peer ID and port must be valid integers.")
         sys.exit(1)
 
     # Start nameserver if not already running
@@ -175,7 +190,7 @@ if __name__ == "__main__":
         nameserver_thread.start()
 
 
-    peer = Peer(peer_id, "localhost", 8888)
+    peer = Peer(peer_id, peer_host, peer_port)
 
     pyro_thread = threading.Thread(target=run_pyro_server, args=(peer,), daemon=True)
     pyro_thread.start()
