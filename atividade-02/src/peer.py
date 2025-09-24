@@ -102,22 +102,43 @@ class Peer:
                     time.sleep(1)
             elif self.state == 'HELD':
                 print("Using thing...")
-                time.sleep(5)
-                print("Enough using thing.")
-                self.state = 'RELEASED'
             else:
                 # oh no
                 break
 
 
 def run_pyro_server(peer_instance):
-    daemon = Pyro5.Daemon(host=peer_instance.get_host(), port=peer_instance.get_port())
-    service_uri = daemon.register(peer_instance, "TODO")
+    pass
+    #daemon = Pyro5.Daemon(host=peer_instance.get_host(), port=peer_instance.get_port())
+    #service_uri = daemon.register(peer_instance, "TODO")
 
-    daemon.requestLoop()
+    #daemon.requestLoop()
 
 def run_pyro_nameserver(address, port):
     Pyro5.nameserver.start_ns_loop(host=address, port=port)
+
+def run_cli(peer):
+    """Runs a command-line interface for the peer."""
+    while True:
+        command = input("> ")
+        if command == "request resource":
+            peer.send_request()
+            print("Request sent.")
+            print(f"Current state: {peer.get_state()}")
+        elif command == "free resource":
+            if peer.get_state() == 'HELD':
+                peer.state = 'RELEASED'
+                peer.permissions.reset()
+                print("Resource freed.")
+            else:
+                print("Cannot free resource; resource not held.")
+        elif command == "list peers":
+            print(f"Known peers: {peer.permissions.peers}")
+        elif command == "exit":
+            print("Exiting CLI...")
+            break
+        else:
+            print("Unknown command. Available commands: request resource, free resource, list peers")
 
 
 def main(peer):
@@ -145,7 +166,12 @@ if __name__ == "__main__":
 
     peer = Peer("localhost", 8888)
 
-    pyro_thread = threading.Thread(target=run_pyro_server, args=(peer), daemon=True)
+    pyro_thread = threading.Thread(target=run_pyro_server, args=(peer,), daemon=True)
     pyro_thread.start()
+
+    time.sleep(2)
+
+    cli_thread = threading.Thread(target=run_cli, args=(peer,), daemon=True)
+    cli_thread.start()
 
     main(peer)
