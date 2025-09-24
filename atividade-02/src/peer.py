@@ -127,11 +127,25 @@ def main(peer):
 
 if __name__ == "__main__":
 
-    nameserver_thread = threading.Thread(target=run_pyro_server, args=("localhost", 8910), daemon=True)
-    nameserver_thread.start()
-    #peer = Peer("localhost", 8888)
+    # Start nameserver if not already running
+    ns_address = "localhost"
+    ns_port = 9090
 
-    #pyro_thread = threading.Thread(target=run_pyro_server, args=(peer), daemon=True)
-    #pyro_thread.start()
+    try:
+        Pyro5.api.locate_ns(host=ns_address, port=ns_port)
+        print(f"Nameserver found at {ns_address}:{ns_port}.")
+    except Pyro5.errors.NamingError:
+        nameserver_thread = threading.Thread(
+            target=run_pyro_nameserver, 
+            args=(ns_address, ns_port), 
+            daemon=True
+        )
+        nameserver_thread.start()
 
-    #main()
+
+    peer = Peer("localhost", 8888)
+
+    pyro_thread = threading.Thread(target=run_pyro_server, args=(peer), daemon=True)
+    pyro_thread.start()
+
+    main(peer)
