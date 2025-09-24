@@ -2,6 +2,7 @@ import Pyro5.api
 import Pyro5
 import threading
 import time
+import sys
 
 class Permissions:
     def __init__(self):
@@ -43,13 +44,13 @@ class Permissions:
 
 class Peer:
 
-    def __init__(self, host, port):
+    def __init__(self, id, host, port):
         self.host = host
         self.port = port
         self.reader = None
         self.writer = None
         self.state = 'RELEASED'
-        self.id = 0
+        self.id = id
         self.request_queue = []
         self.permissions = Permissions()
 
@@ -108,11 +109,10 @@ class Peer:
 
 
 def run_pyro_server(peer_instance):
-    pass
-    #daemon = Pyro5.Daemon(host=peer_instance.get_host(), port=peer_instance.get_port())
-    #service_uri = daemon.register(peer_instance, "TODO")
+    daemon = Pyro5.api.Daemon(host=peer_instance.get_host(), port=peer_instance.get_port())
+    service_uri = daemon.register(peer_instance, f"peer.{peer_instance.id}")
 
-    #daemon.requestLoop()
+    daemon.requestLoop()
 
 def run_pyro_nameserver(address, port):
     Pyro5.nameserver.start_ns_loop(host=address, port=port)
@@ -148,6 +148,17 @@ def main(peer):
 
 if __name__ == "__main__":
 
+    if len(sys.argv) < 2:
+        print("Usage: python peer.py <peer_id>")
+        sys.exit(1) # Exit the program with an error code
+
+    try:
+        # Get the ID from the command-line arguments and convert it to an integer
+        peer_id = int(sys.argv[1])
+    except ValueError:
+        print("Error: The peer ID must be a valid integer.")
+        sys.exit(1)
+
     # Start nameserver if not already running
     ns_address = "localhost"
     ns_port = 9090
@@ -164,7 +175,7 @@ if __name__ == "__main__":
         nameserver_thread.start()
 
 
-    peer = Peer("localhost", 8888)
+    peer = Peer(peer_id, "localhost", 8888)
 
     pyro_thread = threading.Thread(target=run_pyro_server, args=(peer,), daemon=True)
     pyro_thread.start()
