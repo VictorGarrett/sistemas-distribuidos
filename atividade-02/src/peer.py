@@ -116,6 +116,10 @@ def run_pyro_server(peer_instance):
 
     daemon.requestLoop()
 
+def run_pyro_nameserver(address, port):
+    Pyro5.nameserver.start_ns_loop(host=address, port=port)
+
+
 def main(peer):
     peer.run()
 
@@ -123,8 +127,8 @@ def main(peer):
 
 if __name__ == "__main__":
 
-    Pyro5.nameserver.NameServer.start_ns()
-
+    nameserver_thread = threading.Thread(target=run_pyro_server, args=("localhost", 8910), daemon=True)
+    nameserver_thread.start()
     #peer = Peer("localhost", 8888)
 
     #pyro_thread = threading.Thread(target=run_pyro_server, args=(peer), daemon=True)
