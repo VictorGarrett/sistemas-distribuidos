@@ -12,6 +12,8 @@ class Permissions:
 
     def add_peer(self, peer_id, host, port):
         self.peers[peer_id] = (host, port)
+        self.permissions[peer_id] = False
+        self.alive[peer_id] = time.time()
 
     def remove_peer(self, peer_id):
         if peer_id in self.peers:
@@ -23,10 +25,10 @@ class Permissions:
         self.permissions[peer_id] = True
 
     def check_alive(self, peer_id):
-        return (time.now() - self.alive[peer_id]) < 10
+        return (time.time() - self.alive[peer_id]) < 10
     
     def set_alive(self, peer_id):
-        self.alive[peer_id] = time.now()
+        self.alive[peer_id] = time.time()
 
     def remove_dead_peers(self):
         for peer_id in list(self.peers.keys()):
@@ -59,9 +61,10 @@ class Peer:
             if name != f"peer.{self.id}":
                 peers[name] = Pyro5.api.Proxy(uri)
         
-        print(f"Discovered peers: {list(peers.keys())}")
+        print(f"Discovered peers: {peers}")
         for p_name, p_proxy in peers.items():
             p_proxy.receive_join(self.id, self.host, self.port)
+            self.receive_join(int(p_name.split(".")[1]), p_proxy._pyroUri.host, p_proxy._pyroUri.port)
 
 
     def get_host(self):
@@ -124,6 +127,9 @@ class Peer:
 def run_pyro_server(peer_instance):
     daemon = Pyro5.api.Daemon(host=peer_instance.get_host(), port=peer_instance.get_port())
     service_uri = daemon.register(peer_instance, f"peer.{peer_instance.id}")
+
+    ns = Pyro5.api.locate_ns()
+    ns.register(f"peer.{peer_instance.id}", service_uri)
 
     daemon.requestLoop()
 
