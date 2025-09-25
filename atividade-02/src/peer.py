@@ -99,8 +99,10 @@ class Peer:
         pass
 
     def send_request(self):
+        self.request_time = time.time()
         self.state = 'WANTED'
-        # send request to all peers (TODO)
+        self.permissions.ask_permissions(self.request_time)
+
 
     # Pyro interface for remote peers -----------------------------------
 
@@ -143,6 +145,10 @@ class Peer:
                     self.request_queue.remove(req)
                 
             elif self.state == 'WANTED':
+                for req in self.request_queue:
+                    if req[1] < self.request_time or (req[1] == self.request_time and req[0] < self.id):
+                        self.send_response(req, True)
+                        self.request_queue.remove(req)
                 if self.permissions.all_granted():
                     self.state = 'HELD'
 
