@@ -7,6 +7,7 @@ import sys
 class Permissions:
     def __init__(self):
         self.peers = {}
+        self.proxies = {}
         self.permissions = {}
         self.alive = {} 
 
@@ -14,12 +15,14 @@ class Permissions:
         self.peers[peer_id] = (host, port)
         self.permissions[peer_id] = False
         self.alive[peer_id] = time.time()
+        self.proxies[peer_id] = Pyro5.api.Proxy(f"PYRO:peer.{peer_id}@{host}:{port}")
 
     def remove_peer(self, peer_id):
         if peer_id in self.peers:
             del self.peers[peer_id]
             del self.permissions[peer_id]
             del self.alive[peer_id]
+            del self.proxies[peer_id]
     
     def give_permission(self, peer_id):
         self.permissions[peer_id] = True
@@ -64,7 +67,8 @@ class Peer:
         print(f"Discovered peers: {peers}")
         for p_name, p_proxy in peers.items():
             p_proxy.receive_join(self.id, self.host, self.port)
-            self.receive_join(int(p_name.split(".")[1]), p_proxy._pyroUri.host, p_proxy._pyroUri.port)
+            self.permissions.add_peer(int(p_name.split(".")[1]), p_proxy._pyroUri.host, p_proxy._pyroUri.port)
+
 
 
     def get_host(self):
