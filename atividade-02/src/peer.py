@@ -29,6 +29,13 @@ class Permissions:
 
     def check_alive(self, peer_id):
         return (time.time() - self.alive[peer_id]) < 10
+
+    def send_heartbeats(self):
+        for peer_id, proxy in self.proxies.items():
+            try:
+                proxy.receive_heartbeat(self.id)
+            except Pyro5.errors.CommunicationError:
+                print(f"Failed to send heartbeat to peer {peer_id}")
     
     def set_alive(self, peer_id):
         self.alive[peer_id] = time.time()
@@ -57,6 +64,7 @@ class Peer:
         self.id = id
         self.request_queue = []
         self.permissions = Permissions()
+        self.last_heartbeat = time.time()
 
         peers = {}
         peer_uris = self.ns.list(prefix="peer.")
@@ -108,19 +116,26 @@ class Peer:
 
     def run(self):
 
-        self.permissions.remove_dead_peers()
-
         while True:
+
+            # Send heartbeat to all peers
+            if time.time() - self.last_heartbeat >= 1:
+                self.permissions.send_heartbeats()
+                self.last_heartbeat = time.time()
+
+            # Check for dead peers
+            self.permissions.remove_dead_peers()
+
+            # Process state
             if self.state == 'RELEASED':
                 for req in self.request_queue:
                     self.send_confirmation(req)
                     self.request_queue.remove(req)
                 
             elif self.state == 'WANTED':
-                if not self.permissions.all_granted():
+                if self.permissions.all_granted():
                     self.state = 'HELD'
-                else:
-                    time.sleep(1)
+                    
             elif self.state == 'HELD':
                 print("Using thing...")
             else:
@@ -210,4 +225,6 @@ if __name__ == "__main__":
     cli_thread = threading.Thread(target=run_cli, args=(peer,), daemon=True)
     cli_thread.start()
 
+    #main_thread = threading.Thread(target=main, args=(peer,), daemon=True)
+    #main_thread.start()
     main(peer)
