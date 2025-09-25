@@ -48,8 +48,15 @@ class Permissions:
     def reset(self):
         for peer_id in self.permissions:
             self.permissions[peer_id] = False
-            self.alive[peer_id] = time.now()
     
+    def ask_permissions(self, request_time):
+        self.reset()
+        for peer_id, proxy in self.proxies.items():
+            try:
+                proxy.receive_request((self.id, request_time))
+            except Pyro5.errors.CommunicationError:
+                print(f"Failed to send request to peer {peer_id}")
+
     def all_granted(self):
         return all(self.permissions.values())
 
@@ -62,6 +69,7 @@ class Peer:
         self.state = 'RELEASED'
         self.ns = Pyro5.api.locate_ns()
         self.id = id
+        self.request_time = time.time()
         self.request_queue = []
         self.permissions = Permissions()
         self.last_heartbeat = time.time()
@@ -102,6 +110,8 @@ class Peer:
 
     @Pyro5.api.expose
     def receive_request(self, req):
+       if self.state == 'RELEASED' or (self.state == 'WANTED' and req[1] < self.request_time) or (self.state == 'WANTED' and req[1] == self.request_time and req[0] < self.id):
+           self.send_response(req[0], True)
        self.request_queue.append(req)
     
     @Pyro5.api.expose
@@ -129,13 +139,13 @@ class Peer:
             # Process state
             if self.state == 'RELEASED':
                 for req in self.request_queue:
-                    self.send_confirmation(req)
+                    self.send_response(req, True)
                     self.request_queue.remove(req)
                 
             elif self.state == 'WANTED':
                 if self.permissions.all_granted():
                     self.state = 'HELD'
-                    
+
             elif self.state == 'HELD':
                 print("Using thing...")
             else:
