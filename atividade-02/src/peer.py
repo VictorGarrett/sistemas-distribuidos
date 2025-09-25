@@ -3,6 +3,7 @@ import Pyro5
 import threading
 import time
 import sys
+import queue
 
 class Permissions:
     def __init__(self):
@@ -30,10 +31,10 @@ class Permissions:
     def check_alive(self, peer_id):
         return (time.time() - self.alive[peer_id]) < 10
 
-    def send_heartbeats(self):
+    def send_heartbeats(self, id):
         for peer_id, proxy in self.proxies.items():
             try:
-                proxy.receive_heartbeat(self.id)
+                proxy.receive_heartbeat(id)
             except Pyro5.errors.CommunicationError:
                 print(f"Failed to send heartbeat to peer {peer_id}")
     
@@ -49,11 +50,11 @@ class Permissions:
         for peer_id in self.permissions:
             self.permissions[peer_id] = False
     
-    def ask_permissions(self, request_time):
+    def ask_permissions(self, request_time, id):
         self.reset()
         for peer_id, proxy in self.proxies.items():
             try:
-                proxy.receive_request((self.id, request_time))
+                proxy.receive_request((id, request_time))
             except Pyro5.errors.CommunicationError:
                 print(f"Failed to send request to peer {peer_id}")
 
@@ -104,7 +105,7 @@ class Peer:
     def send_request(self):
         self.request_time = time.time()
         self.state = 'WANTED'
-        self.permissions.ask_permissions(self.request_time)
+        self.permissions.ask_permissions(self.request_time, self.id)
 
 
     # Pyro interface for remote peers -----------------------------------
@@ -132,14 +133,31 @@ class Peer:
     def run(self):
 
         while True:
+            for proxy in self.permissions.proxies.values():
+                proxy._pyroClaimOwnership()
 
             # Send heartbeat to all peers
             if time.time() - self.last_heartbeat >= 1:
-                self.permissions.send_heartbeats()
+                self.permissions.send_heartbeats(self.id)
                 self.last_heartbeat = time.time()
 
             # Check for dead peers
             self.permissions.remove_dead_peers()
+
+            # Process CLI commands
+            cmd = command_queue.get() if not command_queue.empty() else None
+
+            if cmd == "request resource":
+                self.send_request()
+                print("Request sent.")
+                print(f"Current state: {peer.get_state()}")
+            elif cmd == "free resource":
+                if self.state == 'HELD':
+                    self.state = 'RELEASED'
+                    self.permissions.reset()
+                    print("Resource freed.")
+                else:
+                    print("Cannot free resource; resource not held.")
 
             # Process state
             if self.state == 'RELEASED':
@@ -179,16 +197,9 @@ def run_cli(peer):
     while True:
         command = input("> ")
         if command == "request resource":
-            peer.send_request()
-            print("Request sent.")
-            print(f"Current state: {peer.get_state()}")
+            queue.put("request resource")
         elif command == "free resource":
-            if peer.get_state() == 'HELD':
-                peer.state = 'RELEASED'
-                peer.permissions.reset()
-                print("Resource freed.")
-            else:
-                print("Cannot free resource; resource not held.")
+            queue.put("free resource")
         elif command == "list peers":
             print(f"Known peers: {peer.permissions.peers}")
         elif command == "exit":
@@ -204,6 +215,8 @@ def main(peer):
 
 
 if __name__ == "__main__":
+
+    command_queue = queue.Queue()
 
     if len(sys.argv) < 4:
         print("Usage: python peer.py <peer_id> <peer_host> <peer_port>")
