@@ -95,8 +95,11 @@ class Peer:
         return self.state
 
     def send_response(self, req, granted):
-        # send confirmation to the requesting peer (TODO)
-        pass
+        peer_id = req[0]
+        try:
+            self.permissions.proxies[peer_id].receive_response(self.id, granted)
+        except Pyro5.errors.CommunicationError:
+            print(f"Failed to send response to peer {peer_id}")
 
     def send_request(self):
         self.request_time = time.time()
