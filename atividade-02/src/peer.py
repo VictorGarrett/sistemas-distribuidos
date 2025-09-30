@@ -54,9 +54,12 @@ class Permissions:
         self.reset()
         for peer_id, proxy in self.proxies.items():
             try:
-                proxy.receive_request((id, request_time,))
-            except Pyro5.errors.CommunicationError:
-                print(f"Failed to send request to peer {peer_id}")
+                if proxy.receive_request((id, request_time,)):
+                    self.give_permission(peer_id)
+            except Exception as e:
+                print(f"Failed to send request to peer {peer_id}. It's dead")
+                self.remove_peer(peer_id)
+
 
     def all_granted(self):
         return all(self.permissions.values())
@@ -99,8 +102,8 @@ class Peer:
         peer_id = req[0]
         try:
             self.permissions.proxies[peer_id].receive_response(self.id, granted)
-        except Pyro5.errors.CommunicationError:
-            print(f"Failed to send response to peer {peer_id}")
+        except Exception as e:
+            print(f"Failed to send response to peer {peer_id}: {e}")
 
     def send_request(self):
         self.request_time = time.time()
@@ -115,7 +118,10 @@ class Peer:
 
     @Pyro5.api.expose
     def receive_request(self, req):
-        command_queue.put(("request", req))
+        if self.state == 'HELD':
+            command_queue.put(("request", req))
+            return False
+        return True
 
     @Pyro5.api.expose
     def receive_response(self, peer_id, granted):
