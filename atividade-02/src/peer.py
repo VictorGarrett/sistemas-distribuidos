@@ -52,13 +52,16 @@ class Permissions:
     
     def ask_permissions(self, request_time, id):
         self.reset()
+        to_remove = []
         for peer_id, proxy in self.proxies.items():
             try:
                 if proxy.receive_request((id, request_time,)):
                     self.give_permission(peer_id)
             except Exception as e:
                 print(f"Failed to send request to peer {peer_id}. It's dead")
-                self.remove_peer(peer_id)
+                to_remove.append(peer_id)
+        for peer_id in to_remove:
+            self.remove_peer(peer_id)
 
 
     def all_granted(self):
