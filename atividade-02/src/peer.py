@@ -192,9 +192,10 @@ class Peer:
                             self.request_queue.remove(req)
                     if self.permissions.all_granted():
                         self.state = 'HELD'
+                        print("Using thing...")
 
                 elif self.state == 'HELD':
-                    print("Using thing...")
+                    pass
                 else:
                     # oh no
                     break
