@@ -146,67 +146,71 @@ class Peer:
             # Process commands (from CLI or Pyro)
             if not command_queue.empty():
                 cmd = command_queue.get()
+                self._process_cmd(cmd)
 
-                # CLI string commands ------------------------
-                if isinstance(cmd, str):
-                    if cmd == "request resource":
-                        self.send_request()
-                        print("Request sent.")
-                        print(f"Current state: {self.get_state()}")
-                    elif cmd == "free resource":
-                        if self.state == 'HELD':
-                            self.state = 'RELEASED'
-                            self.permissions.reset()
-                            print("Resource freed.")
-                        else:
-                            print("Cannot free resource; resource not held.")
+            # Process state
+            self._process_state()
 
-                # Pyro event tuples --------------------------
-                elif isinstance(cmd, tuple):
-                    action = cmd[0]
+    def _process_state(self):
+        if self.state == 'RELEASED':
+            for req in self.request_queue:
+                self.send_response(req, True)
+                self.request_queue.remove(req)
+                        
+        elif self.state == 'WANTED':
+            for req in self.request_queue:
+                if req[1] < self.request_time or (req[1] == self.request_time and req[0] < self.id):
+                    self.send_response(req, True)
+                    self.request_queue.remove(req)
+            if self.permissions.all_granted():
+                self.state = 'HELD'
+                print("Using thing...")
 
-                    if action == "heartbeat":
-                        _, peer_id = cmd
-                        self.permissions.set_alive(peer_id)
+        elif self.state == 'HELD':
+            pass
+        else:
+            print("??????????????????????????????")
 
-                    elif action == "request":
-                        _, req = cmd
-                        self.request_queue.append(req)
-                        print(f"Added request {req[0]}")
-
-                    elif action == "response":
-                        _, peer_id, granted = cmd
-                        if granted:
-                            self.permissions.give_permission(peer_id)
-                            print(f"Got permission from {peer_id}")
-
-                    elif action == "join":
-                        _, peer_id, host, port = cmd
-                        self.permissions.add_peer(peer_id, host, port)
-                        print(f"Added peer {peer_id} ({host}:{port})")
-
-                # Process state
-                if self.state == 'RELEASED':
-                    for req in self.request_queue:
-                        self.send_response(req, True)
-                        self.request_queue.remove(req)
-                    
-                elif self.state == 'WANTED':
-                    for req in self.request_queue:
-                        if req[1] < self.request_time or (req[1] == self.request_time and req[0] < self.id):
-                            self.send_response(req, True)
-                            self.request_queue.remove(req)
-                    if self.permissions.all_granted():
-                        self.state = 'HELD'
-                        print("Using thing...")
-
-                elif self.state == 'HELD':
-                    pass
+    def _process_cmd(self, cmd):
+        # CLI string commands ------------------------
+        if isinstance(cmd, str):
+            if cmd == "request resource":
+                self.send_request()
+                print("Request sent.")
+                print(f"Current state: {self.get_state()}")
+            elif cmd == "free resource":
+                if self.state == 'HELD':
+                    self.state = 'RELEASED'
+                    self.permissions.reset()
+                    print("Resource freed.")
                 else:
-                    # oh no
-                    break
+                    print("Cannot free resource; resource not held.")
 
+        # Pyro event tuples --------------------------
+        elif isinstance(cmd, tuple):
+            action = cmd[0]
 
+            if action == "heartbeat":
+                _, peer_id = cmd
+                self.permissions.set_alive(peer_id)
+
+            elif action == "request":
+                _, req = cmd
+                self.request_queue.append(req)
+                print(f"Added request {req[0]}")
+
+            elif action == "response":
+                _, peer_id, granted = cmd
+                if granted:
+                    self.permissions.give_permission(peer_id)
+                    print(f"Got permission from {peer_id}")
+
+            elif action == "join":
+                _, peer_id, host, port = cmd
+                self.permissions.add_peer(peer_id, host, port)
+                print(f"Added peer {peer_id} ({host}:{port})")
+
+    
 def run_pyro_server(peer_instance):
     daemon = Pyro5.api.Daemon(host=peer_instance.get_host(), port=peer_instance.get_port())
     service_uri = daemon.register(peer_instance, f"peer.{peer_instance.id}")
