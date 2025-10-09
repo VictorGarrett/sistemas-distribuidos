@@ -5,6 +5,8 @@ import time
 import sys
 import queue
 
+
+MAX_TIME_IN_CS_SEC = 60
 class Permissions:
     def __init__(self):
         self.peers = {}
@@ -167,10 +169,14 @@ class Peer:
                     self.request_queue.remove(req)
             if self.permissions.all_granted():
                 self.state = 'HELD'
+                self.held_since = time.time()
                 print("Using thing...")
 
         elif self.state == 'HELD':
-            pass
+            if time.time() - self.held_since > MAX_TIME_IN_CS_SEC:
+                self.state = "RELEASED"
+                self.permissions.reset()
+                print("Peer has achieved maximum time with resource. Releasing...")
         else:
             print("??????????????????????????????")
 
