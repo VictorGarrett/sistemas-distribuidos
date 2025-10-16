@@ -1,0 +1,12 @@
+[package]
+name = "notification-srv"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lapin = "3.2.1"
+tokio = { version = "1", features = ["full"] }
+futures-lite = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+shared = {path = "../shared"}
