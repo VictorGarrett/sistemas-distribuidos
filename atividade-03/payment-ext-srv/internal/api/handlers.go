@@ -8,25 +8,25 @@ import (
 	"github.com/gofiber/fiber/v2/log"
 )
 
-func HandleNewPayment(pm *internal.PaymentManager) fiber.Handler {
+func HandleNewTransaction(pm *internal.TransactionManager) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var newPayment models.NewPaymentRequest
-		if err := c.BodyParser(&newPayment); err != nil {
-			log.Errorf("Failed to parse request body to NewPaymentRequest type: %v")
+		var newTransaction models.NewTransactionRequest
+		if err := c.BodyParser(&newTransaction); err != nil {
+			log.Errorf("Failed to parse request body to newTransactionRequest type: %v")
 			return c.SendStatus(fiber.ErrBadRequest.Code)
 		}
-		if newPayment.Amount <= 0.0 {
+		if newTransaction.Amount <= 0.0 {
 			log.Error("Payment Amount must be positive")
 			return c.SendStatus(fiber.ErrBadRequest.Code)
 		}
 
-		res := pm.CreateNewPayment(&newPayment)
+		res := pm.CreateNewTransaction(&newTransaction)
 
 		return c.Status(fiber.StatusCreated).JSON(res)
 	}
 }
 
-func HandlePay(pm *internal.PaymentManager) fiber.Handler {
+func HandleTransactionPay(pm *internal.TransactionManager) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return nil
 	}

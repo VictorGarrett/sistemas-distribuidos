@@ -2,18 +2,18 @@ package models
 
 import "github.com/google/uuid"
 
-type NewPaymentRequest struct {
+type NewTransactionRequest struct {
 	Amount   float32 `json:"amount"`
 	Callback string  `json:"callback"`
 }
 
-type NewPaymentResponse struct {
+type NewTransactionResponse struct {
 	ID     string  `json:"id"`
 	Amount float32 `json:"amount"`
 	Link   string  `json:"link"`
 }
 
-type Payment struct {
+type Transaction struct {
 	ID        uuid.UUID
 	Amount    float32
 	CreatedAt int64
@@ -22,16 +22,16 @@ type Payment struct {
 	Status    string
 }
 
-type PaymentStatus string
+type TransactionStatus string
 
 const (
-	Pending PaymentStatus = "PENDING"
-	Expired PaymentStatus = "EXPIRED"
-	Paid    PaymentStatus = "PAID"
+	Pending TransactionStatus = "PENDING"
+	Expired TransactionStatus = "EXPIRED"
+	Paid    TransactionStatus = "PAID"
 )
 
-func (p *Payment) ToNewPaymentResponse(link string) *NewPaymentResponse {
-	return &NewPaymentResponse{
+func (p *Transaction) ToNewTransactionResponse(link string) *NewTransactionResponse {
+	return &NewTransactionResponse{
 		ID:     p.ID.String(),
 		Amount: p.Amount,
 		Link:   link,
