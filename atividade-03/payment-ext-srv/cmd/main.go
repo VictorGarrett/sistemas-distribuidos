@@ -22,10 +22,12 @@ func main() {
 	}
 	flag.Parse()
 
-	pm := &internal.PaymentManager{}
+	baseURL := os.Getenv("BASE_URL")
+
+	pm := internal.NewPaymentManager(baseURL)
 
 	app := fiber.New()
 	app.Post("/new-payment", api.HandleNewPayment(pm))
 	app.Post("/pay", api.HandlePay(pm))
-	app.Listen(os.Getenv("BASE_URL") + ":" + strconv.Itoa(*port))
+	app.Listen(baseURL + ":" + strconv.Itoa(*port))
 }
