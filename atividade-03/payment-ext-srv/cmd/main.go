@@ -8,6 +8,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/log"
 	"github.com/joho/godotenv"
+
+	"payment-ext-srv/internal"
+	"payment-ext-srv/internal/api"
 )
 
 func main() {
@@ -19,8 +22,10 @@ func main() {
 	}
 	flag.Parse()
 
+	pm := &internal.PaymentManager{}
+
 	app := fiber.New()
-	app.Post("/new-payment")
-	app.Post("/pay")
+	app.Post("/new-payment", api.HandleNewPayment(pm))
+	app.Post("/pay", api.HandlePay(pm))
 	app.Listen(os.Getenv("BASE_URL") + ":" + strconv.Itoa(*port))
 }

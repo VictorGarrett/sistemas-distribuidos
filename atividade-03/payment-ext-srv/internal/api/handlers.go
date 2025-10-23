@@ -1,11 +1,19 @@
 package api
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"payment-ext-srv/internal"
 
-func HandleNewPayment(c *fiber.Ctx) {
+	"github.com/gofiber/fiber/v2"
+)
 
+func HandleNewPayment(pm *internal.PaymentManager) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		return nil
+	}
 }
 
-func HandlePay(c *fiber.Ctx) {
-
+func HandlePay(pm *internal.PaymentManager) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		return nil
+	}
 }
