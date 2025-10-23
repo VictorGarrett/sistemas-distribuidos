@@ -14,7 +14,7 @@ type TransactionManager struct {
 	mutex               sync.Mutex
 	pendingTransactions map[uuid.UUID]models.Transaction
 	paidTransactions    map[uuid.UUID]models.Transaction
-	expiredTransaction  map[uuid.UUID]models.Transaction
+	expiredTransactions map[uuid.UUID]models.Transaction
 }
 
 func NewTransactionManager(url string) *TransactionManager {
@@ -22,7 +22,7 @@ func NewTransactionManager(url string) *TransactionManager {
 		Url:                 url,
 		pendingTransactions: make(map[uuid.UUID]models.Transaction),
 		paidTransactions:    make(map[uuid.UUID]models.Transaction),
-		expiredTransaction:  make(map[uuid.UUID]models.Transaction),
+		expiredTransactions: make(map[uuid.UUID]models.Transaction),
 	}
 }
 
@@ -59,4 +59,19 @@ func (pm *TransactionManager) SetPaid(id uuid.UUID) error {
 	pm.paidTransactions[payment.ID] = payment
 
 	return nil
+}
+
+func (pm *TransactionManager) GetTransaction(id uuid.UUID) *models.Transaction {
+	transaction, ok := pm.paidTransactions[id]
+	if ok {
+		return &transaction
+	}
+
+	transaction, ok = pm.pendingTransactions[id]
+	if ok {
+		return &transaction
+	}
+
+	transaction = pm.expiredTransactions[id]
+	return &transaction
 }

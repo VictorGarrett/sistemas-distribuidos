@@ -1,11 +1,13 @@
 package api
 
 import (
+	"net/http"
 	"payment-ext-srv/internal"
 	"payment-ext-srv/internal/models"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/log"
+	"github.com/google/uuid"
 )
 
 func HandleNewTransaction(pm *internal.TransactionManager) fiber.Handler {
@@ -28,6 +30,24 @@ func HandleNewTransaction(pm *internal.TransactionManager) fiber.Handler {
 
 func HandleTransactionPay(pm *internal.TransactionManager) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		return nil
+		tid, err := uuid.Parse(c.Query("tid"))
+		if err != nil {
+			log.Errorf("Invalid Query parameter \"tid\": %v", err)
+			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
+				"error": "Invalid query parameter \"tid\"",
+			})
+		}
+
+		if err = pm.SetPaid(tid); err != nil {
+			log.Errorf("Failed to pay transaction of ID %s: %v", tid.String(), err)
+			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
+				"error": "transaction not found for id " + tid.String(),
+			})
+		}
+
+		transaction := pm.GetTransaction(tid)
+		http.Post(transaction.Callback, "application/json", nil)
+
+		return c.SendStatus(fiber.StatusOK)
 	}
 }
