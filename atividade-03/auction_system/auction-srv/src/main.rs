@@ -1,19 +1,19 @@
 use lapin::{
     options::{ExchangeDeclareOptions, QueueDeclareOptions}, types::FieldTable, Connection, ConnectionProperties
 };
-
-use tokio::task::{spawn_blocking, JoinHandle};
+use tokio::sync::Mutex;
+use tokio::task::{JoinHandle};
 use std::{error::Error, time::{SystemTime, UNIX_EPOCH}};
 use tokio::sync::mpsc;
 use std::sync::Arc;
 
-use crate::{cli::Cli, tasks::{task_cli, task_cron, task_publish_auction_finish, task_publish_auction_start}};
+use crate::{tasks::{task_rest_api, task_cron, task_publish_auction_finish, task_publish_auction_start}};
 
 use shared::models::Auction;
 
 pub mod models;
 pub mod tasks;
-pub mod cli;
+
 
 
 
@@ -63,7 +63,8 @@ fn init_tasks(
     let (started_auction_tx, started_auction_rx) = mpsc::channel::<Auction>(20);
     let (finished_auction_tx, finished_auction_rx) = mpsc::channel::<Auction>(20);
     let (new_auction_tx, new_auction_rx) = mpsc::channel::<Auction>(20);
-    let cli = Cli::new(Some(live_auctions.clone()));
+
+    let live_auctions = Arc::new(Mutex::new(live_auctions));
     handles.push(tokio::spawn(
         task_publish_auction_start(
             conn.clone(),
@@ -80,19 +81,19 @@ fn init_tasks(
 
     handles.push(tokio::spawn(
         task_cron(
-            live_auctions, 
+            Arc::clone(&live_auctions), 
             new_auction_rx, 
-            started_auction_tx, 
+            started_auction_tx,
             finished_auction_tx
         )
     ));
 
-    handles.push(spawn_blocking(move ||{
-        let rt = tokio::runtime::Handle::current();
-        rt.block_on(
-            task_cli(new_auction_tx, cli)
+    handles.push(tokio::spawn(
+        task_rest_api(
+            new_auction_tx,
+            Arc::clone(&live_auctions)
         )
-    }));
+    ));
 
     handles
     

@@ -1,9 +1,7 @@
 [workspace]
 members = [
     "auction-srv",
-    "notification-srv", 
     "bid-srv",
-    "auction-client", 
     "shared"
 ]
 
