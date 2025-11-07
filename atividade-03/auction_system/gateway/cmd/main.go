@@ -8,32 +8,31 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
 	"gateway/internal/handlers"
-	"gateway/internal/rabbitmq"
-	"gateway/internal/service"
+	//"gateway/internal/rabbitmq"
+	"gateway/internal/services"
 )
 
 func main() {
 	// Configuration (can be overridden with environment variables)
-	port := getEnv("PORT", "8080")
-	rabbitURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
-	auctionServiceURL := getEnv("AUCTION_SERVICE_URL", "http://localhost:9001/api/v1")
+	port := getEnv("PORT", "9090")
+	//rabbitURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+	auctionServiceURL := getEnv("AUCTION_SERVICE_URL", "http://localhost:8080")
 
 	// Initialize dependencies
-	auctionSvc := service.NewAuctionService(auctionServiceURL)
+	auctionSvc := services.NewAuctionService(auctionServiceURL)
 	handler := handlers.NewAuctionHandler(auctionSvc)
 
 	// Start RabbitMQ consumer
-	go func() {
-		if err := rabbitmq.Consume(rabbitURL, "events"); err != nil {
-			log.Printf("RabbitMQ consumer error: %v", err)
-		}
-	}()
+	//go func() {
+	//	if err := rabbitmq.Consume(rabbitURL, "events"); err != nil {
+	//		log.Printf("RabbitMQ consumer error: %v", err)
+	//	}
+	//}()
 
 	// Setup HTTP server
 	mux := http.NewServeMux()
-	mux.HandleFunc("/auctions", handler.HandleAuctions)
+	mux.HandleFunc("/api/v1/auctions", handler.HandleAuctions)
 
 	server := &http.Server{
 		Addr:    ":" + port,

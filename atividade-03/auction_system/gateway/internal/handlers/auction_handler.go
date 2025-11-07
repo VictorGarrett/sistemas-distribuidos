@@ -4,15 +4,14 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-
-	"gateway/internal/service"
+	"gateway/internal/services"
 )
 
 type AuctionHandler struct {
-	service *service.AuctionService
+	service *services.AuctionService
 }
 
-func NewAuctionHandler(svc *service.AuctionService) *AuctionHandler {
+func NewAuctionHandler(svc *services.AuctionService) *AuctionHandler {
 	return &AuctionHandler{service: svc}
 }
 

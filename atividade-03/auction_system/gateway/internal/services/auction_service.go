@@ -1,4 +1,4 @@
-package service
+package services
 
 import (
 	"bytes"
@@ -21,7 +21,8 @@ func NewAuctionService(baseURL string) *AuctionService {
 }
 
 func (s *AuctionService) GetActiveAuctions() ([]map[string]interface{}, error) {
-	resp, err := s.client.Get(fmt.Sprintf("%s/auctions/active", s.baseURL))
+	resp, err := s.client.Get(fmt.Sprintf("%s/auctions", s.baseURL))
+	fmt.Printf("GET %s/auctions\n", s.baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active auctions: %w", err)
 	}
@@ -41,6 +42,8 @@ func (s *AuctionService) GetActiveAuctions() ([]map[string]interface{}, error) {
 
 func (s *AuctionService) CreateAuction(payload []byte) ([]byte, error) {
 	resp, err := s.client.Post(fmt.Sprintf("%s/auctions", s.baseURL), "application/json", bytes.NewBuffer(payload))
+	fmt.Printf("POST %s/auctions\n", s.baseURL)
+	fmt.Printf("Request Body: %s\n", string(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create auction: %w", err)
 	}

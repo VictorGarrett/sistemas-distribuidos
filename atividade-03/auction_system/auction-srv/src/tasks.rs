@@ -171,6 +171,7 @@ pub async fn task_cron(
         }
 
         drop(scheduled_auctions);
+        drop(started_auctions);
 
         tokio::time::sleep(Duration::from_millis(300)).await;
     }
