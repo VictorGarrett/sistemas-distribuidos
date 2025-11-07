@@ -18,10 +18,14 @@ func main() {
 	port := getEnv("PORT", "9090")
 	//rabbitURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 	auctionServiceURL := getEnv("AUCTION_SERVICE_URL", "http://localhost:8080")
+	bidServiceURL := getEnv("BID_SERVICE_URL", "http://localhost:8081")
 
 	// Initialize dependencies
 	auctionSvc := services.NewAuctionService(auctionServiceURL)
 	handler := handlers.NewAuctionHandler(auctionSvc)
+
+	bidSvc := services.NewBidService(bidServiceURL)
+	bidHandler := handlers.NewBidHandler(bidSvc)
 
 	// Start RabbitMQ consumer
 	//go func() {
@@ -29,10 +33,11 @@ func main() {
 	//		log.Printf("RabbitMQ consumer error: %v", err)
 	//	}
 	//}()
-
+	
 	// Setup HTTP server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/auctions", handler.HandleAuctions)
+	mux.HandleFunc("/api/v1/bid", bidHandler.HandleBids)
 
 	server := &http.Server{
 		Addr:    ":" + port,
