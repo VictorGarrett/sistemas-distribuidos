@@ -64,7 +64,12 @@ fn init_tasks(
     let (finished_auction_tx, finished_auction_rx) = mpsc::channel::<Auction>(20);
     let (new_auction_tx, new_auction_rx) = mpsc::channel::<Auction>(20);
 
+    let started_auctions: Vec<Auction> = Vec::with_capacity(live_auctions.len());
     let live_auctions = Arc::new(Mutex::new(live_auctions));
+    let started_auctions = Arc::new(Mutex::new(started_auctions));
+
+
+
     handles.push(tokio::spawn(
         task_publish_auction_start(
             conn.clone(),
@@ -82,6 +87,7 @@ fn init_tasks(
     handles.push(tokio::spawn(
         task_cron(
             Arc::clone(&live_auctions), 
+            Arc::clone(&started_auctions), 
             new_auction_rx, 
             started_auction_tx,
             finished_auction_tx
@@ -91,7 +97,9 @@ fn init_tasks(
     handles.push(tokio::spawn(
         task_rest_api(
             new_auction_tx,
-            Arc::clone(&live_auctions)
+            
+            Arc::clone(&live_auctions),
+            Arc::clone(&started_auctions)
         )
     ));
 

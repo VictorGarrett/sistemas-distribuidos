@@ -26,16 +26,19 @@ pub struct CreateAuctionRequest {
 struct AppState {
     new_auction_tx: Sender<Auction>,
     live_auctions: Arc<Mutex<Vec<Auction>>>,
+    started_auctions: Arc<Mutex<Vec<Auction>>>,
 }
 
 /// Task that runs the HTTP server and forwards auctions to the scheduler
 pub async fn task_rest_api(
     new_auction_tx: Sender<Auction>,
     live_auctions: Arc<Mutex<Vec<Auction>>>,
+    started_auctions: Arc<Mutex<Vec<Auction>>>,
 ) {
     let app_state = Arc::new(AppState {
         new_auction_tx,
         live_auctions,
+        started_auctions
     });
 
     let app = Router::new()
@@ -79,7 +82,7 @@ async fn create_auction(
 async fn list_auctions(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<Auction>>, axum::http::StatusCode> {
-    let auctions = state.live_auctions.lock().await.clone();
+    let auctions = state.started_auctions.lock().await.clone();
     Ok(Json(auctions))
 }
 
@@ -124,18 +127,21 @@ pub async fn task_publish_auction_finish(
 
 pub async fn task_cron(
     live_auctions: Arc<Mutex<Vec<Auction>>>,
+    started_auctions: Arc<Mutex<Vec<Auction>>>,
     mut new_auction_rx: Receiver<Auction>,
     mut started_auction_tx: Sender<Auction>,
     mut finished_auction_tx: Sender<Auction>
 ){
     let scheduled_auctions = live_auctions.lock().await;
     let mut finished_auctions: Vec<Auction> = Vec::with_capacity(scheduled_auctions.len());
-    let mut started_auctions: Vec<Auction> = Vec::with_capacity(scheduled_auctions.len());
+    
     drop(scheduled_auctions);
 
     loop{
 
         let mut scheduled_auctions = live_auctions.lock().await;
+        let mut started_auctions = started_auctions.lock().await;
+
 
         if let Ok(auction) = new_auction_rx.try_recv(){
             scheduled_auctions.push(auction)
