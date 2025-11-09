@@ -31,11 +31,9 @@ func NewPaymentManager(
 	}
 }
 
-func (pm *PaymentManager) CreateNewPayment(req *models.NewAuctionWinner) *models.Payment {
-	paymentID := uuid.New()
-
+func (pm *PaymentManager) CreateNewPayment(req *models.NewAuctionWinner, id uuid.UUID) *models.Payment {
 	payment := models.Payment{
-		ID:        paymentID,
+		ID:        id,
 		ClientID:  req.ClientID,
 		AuctionID: req.AuctionID,
 		Amount:    req.Amount,

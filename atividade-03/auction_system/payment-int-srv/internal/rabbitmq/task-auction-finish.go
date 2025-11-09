@@ -1,10 +1,14 @@
 package rabbitmq
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http"
 	"payment-srv/internal"
 	"payment-srv/internal/models"
 
+	"github.com/gofiber/fiber/v2/log"
+	"github.com/google/uuid"
 	"github.com/streadway/amqp"
 )
 
@@ -62,18 +66,44 @@ func (taf *TaskAuctionFinish) Run() error {
 		var auctionWinner models.NewAuctionWinner
 		json.Unmarshal(msg.Body, &auctionWinner)
 
-		newPayment := taf.pm.CreateNewPayment(&auctionWinner)
-		res := sendNewTransaction(newPayment)
-		taf.publishLink(res)
+		res := sendNewTransaction(&auctionWinner)
+		transactionID, _ := uuid.Parse(res.ID)
+		taf.pm.CreateNewPayment(&auctionWinner, transactionID)
+		taf.linksChannel <- models.PaymentLink{
+			PaymentID: transactionID,
+			Link:      res.Link,
+		}
 	}
 
 	return nil
 }
 
-func sendNewTransaction(newPayment *models.Payment) string {
-	return ""
-}
+func sendNewTransaction(auctionWinner *models.NewAuctionWinner) *models.NewTransactionResponse {
+	transactionReq := &models.NewTransactionRequest{
+		Amount:   auctionWinner.Amount,
+		Callback: "callback",
+	}
 
-func (taf *TaskAuctionFinish) publishLink(payment string) {
+	body, _ := json.Marshal(transactionReq)
 
+	res, err := http.Post(
+		"service-url",
+		"application/json",
+		bytes.NewBuffer(body),
+	)
+	defer res.Body.Close()
+
+	if err != nil {
+		log.Error("Some Error yadayada")
+		return nil
+	}
+
+	var transactionResponse models.NewTransactionResponse
+	err = json.NewDecoder(res.Body).Decode(&transactionResponse)
+	if err != nil {
+		log.Error("Some Error yadayada")
+		return nil
+	}
+
+	return &transactionResponse
 }
