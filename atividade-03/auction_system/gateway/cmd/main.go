@@ -27,6 +27,10 @@ func main() {
 	bidSvc := services.NewBidService(bidServiceURL)
 	bidHandler := handlers.NewBidHandler(bidSvc)
 
+	sseBroker := handlers.NewSseBroker()
+    // 2. Create the SSE handler, giving it the broker.
+    sseHandler := handlers.NewSseHandler(sseBroker)
+
 	// Start RabbitMQ consumer
 	//go func() {
 	//	if err := rabbitmq.Consume(rabbitURL, "events"); err != nil {
@@ -38,6 +42,12 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/auctions", handler.HandleAuctions)
 	mux.HandleFunc("/api/v1/bid", bidHandler.HandleBids)
+	mux.HandleFunc("/api/v1/events", sseHandler.HandleEvents)
+	mux.HandleFunc("/api/v1/subscribe", sseHandler.HandleSubscribe)
+	mux.HandleFunc("/api/v1/unsubscribe", sseHandler.HandleUnsubscribe)
+
+
+	
 
 	server := &http.Server{
 		Addr:    ":" + port,

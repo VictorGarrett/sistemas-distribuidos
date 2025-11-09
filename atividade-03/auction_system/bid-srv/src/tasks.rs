@@ -165,6 +165,20 @@ async fn make_bid_handler(
         (StatusCode::CREATED, "Bid accepted").into_response()
     } else {
         println!("Bid was deemed invalid");
+
+        let channel = match state.conn.create_channel().await {
+            Ok(channel) => channel,
+            Err(e) => {
+                eprintln!("Failed to create RabbitMQ channel: {}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to connect to queue").into_response();
+            }
+        };
+
+        if let Err(e) = publish_invalidated_bid(&channel, &bid).await{
+            eprintln!("Failed to publish invalidated bid: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Bid saved, but failed to publish").into_response();
+        }
+        
         (StatusCode::BAD_REQUEST, "Bid was deemed invalid (e.g., signature failure)").into_response()
     }
 }
@@ -245,6 +259,27 @@ async fn publish_validated_bid(
         .await?
         .await?;
     println!("Published Validated bid on lance_validado");
+    dbg!(bid);
+
+    Ok(())
+}
+
+async fn publish_invalidated_bid(
+    channel: &Channel, 
+    bid: &Bid
+) -> Result<(), Box<dyn std::error::Error>> {
+    let payload = serde_json::to_vec(bid)?;
+    channel
+        .basic_publish(
+            "",
+            "lance_invalidado",
+            BasicPublishOptions::default(),
+            &payload,
+            lapin::BasicProperties::default(),
+        )
+        .await?
+        .await?;
+    println!("Published Validated bid on lance_invalidado");
     dbg!(bid);
 
     Ok(())
