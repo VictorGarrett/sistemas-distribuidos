@@ -11,9 +11,16 @@ import (
 type TaskAuctionFinish struct {
 	pm         *internal.PaymentManager
 	rmqChannel *amqp.Channel
+
+	linksChannel chan models.PaymentLink
 }
 
-func NewTaskAuctionFinish(paymentManager *internal.PaymentManager, conn *amqp.Connection) (*TaskAuctionFinish, error) {
+func NewTaskAuctionFinish(
+	paymentManager *internal.PaymentManager,
+	conn *amqp.Connection,
+	linksChannel chan models.PaymentLink,
+) (*TaskAuctionFinish, error) {
+
 	amqpChannel, err := conn.Channel()
 	if err != nil {
 		return nil, err
@@ -29,8 +36,9 @@ func NewTaskAuctionFinish(paymentManager *internal.PaymentManager, conn *amqp.Co
 	)
 
 	task := TaskAuctionFinish{
-		pm:         paymentManager,
-		rmqChannel: amqpChannel,
+		pm:           paymentManager,
+		rmqChannel:   amqpChannel,
+		linksChannel: linksChannel,
 	}
 
 	return &task, nil
@@ -55,11 +63,17 @@ func (taf *TaskAuctionFinish) Run() error {
 		json.Unmarshal(msg.Body, &auctionWinner)
 
 		newPayment := taf.pm.CreateNewPayment(&auctionWinner)
-		sendNewTransaction(newPayment)
+		res := sendNewTransaction(newPayment)
+		taf.publishLink(res)
 	}
 
 	return nil
 }
 
-func sendNewTransaction(newPayment *models.Payment) {
+func sendNewTransaction(newPayment *models.Payment) string {
+	return ""
+}
+
+func (taf *TaskAuctionFinish) publishLink(payment string) {
+
 }

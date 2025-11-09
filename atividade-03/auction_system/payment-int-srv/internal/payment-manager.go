@@ -14,13 +14,20 @@ type PaymentManager struct {
 	mutex           sync.Mutex
 	pendingPayments map[uuid.UUID]models.Payment
 	paidPayments    map[uuid.UUID]models.Payment
+
+	//channels
+	updatesChannel chan models.PaymentUpdate
 }
 
-func NewPaymentManager(url string) *PaymentManager {
+func NewPaymentManager(
+	url string,
+	updatesChannel chan models.PaymentUpdate,
+) *PaymentManager {
 	return &PaymentManager{
 		Url:             url,
 		pendingPayments: make(map[uuid.UUID]models.Payment),
 		paidPayments:    make(map[uuid.UUID]models.Payment),
+		updatesChannel:  updatesChannel,
 	}
 }
 
@@ -54,6 +61,11 @@ func (pm *PaymentManager) SetPaid(id uuid.UUID) error {
 	delete(pm.pendingPayments, id)
 
 	pm.paidPayments[payment.ID] = payment
+
+	pm.updatesChannel <- models.PaymentUpdate{
+		PaymentID: id,
+		Status:    "PAID",
+	}
 
 	return nil
 }
