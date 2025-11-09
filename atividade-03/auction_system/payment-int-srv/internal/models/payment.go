@@ -2,17 +2,25 @@ package models
 
 import "github.com/google/uuid"
 
-type NewAuctionWinner struct {
-	ClientID  int64   `json:"client_id"`
-	AuctionID string  `json:"auction"`
-	Amount    float32 `json:"amount"`
-}
-
 type Payment struct {
 	ID        uuid.UUID
-	ClientID  int64
-	AuctionID string
+	ClientID  int32
+	AuctionID int32
 	Amount    float32
 	CreatedAt int64
 	PaidAt    int64
+}
+
+func (p *Payment) ToPaymentUpdatePublish(update *PaymentUpdate) *PaymentUpdatePublish {
+	return &PaymentUpdatePublish{
+		PaymentID: p.ID.String(),
+		ClientID:  p.ClientID,
+		AuctionID: p.AuctionID,
+		Status:    update.Status,
+	}
+}
+
+type PaymentUpdate struct {
+	PaymentID uuid.UUID
+	Status    string
 }
