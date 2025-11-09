@@ -20,7 +20,22 @@ func (p *Payment) ToPaymentUpdatePublish(update *PaymentUpdate) *PaymentUpdatePu
 	}
 }
 
+func (p *Payment) ToPaymentLinkPublish(pl *PaymentLink) *PaymentLinkPublish {
+	return &PaymentLinkPublish{
+		PaymentID: p.ID.String(),
+		ClientID:  p.ClientID,
+		AuctionID: p.AuctionID,
+		Amount:    p.Amount,
+		Link:      pl.Link,
+	}
+}
+
 type PaymentUpdate struct {
 	PaymentID uuid.UUID
 	Status    string
+}
+
+type PaymentLink struct {
+	PaymentID uuid.UUID
+	Link      string
 }
