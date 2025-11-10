@@ -2,7 +2,7 @@ package rabbitmq
 
 import (
 	"log"
-
+	"encoding/json"
 	"github.com/streadway/amqp"
 )
 
@@ -19,40 +19,38 @@ type Bid struct {
 type EventMessage struct {
 	EventType string
 	AuctionId int
-	data 	[]byte
+	Data 	  string
 }
 
 
 
-func Consume(url) error {
+func Consume(url string) (chan EventMessage, error) {
 
 
 	conn, err := amqp.Dial(url)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer conn.Close()
 
 	ch, err := conn.Channel()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer ch.Close()
 
 	// Lance validado
 	_, err = ch.QueueDeclare(
 		"lance_validado", // name
-		true,  // durable
+		false,  // durable
 		false, // auto-delete
 		false, // exclusive
 		false, // no-wait
 		nil,   // arguments
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	lance_validado_msgs, err := ch.Consume(
+	lance_validado_msgs, _ := ch.Consume(
 		"lance_validado",
 		"",
 		true,  // auto-ack
@@ -61,23 +59,21 @@ func Consume(url) error {
 		false, // no-wait
 		nil,
 	)
-	if err != nil {
-		return err
-	}
+
 	// Lance invalidado
 	_, err = ch.QueueDeclare(
 		"lance_invalidado", // name
-		true,  // durable
+		false,  // durable
 		false, // auto-delete
 		false, // exclusive
 		false, // no-wait
 		nil,   // arguments
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	lance_invalidado_msgs, err := ch.Consume(
+	lance_invalidado_msgs, _ := ch.Consume(
 		"lance_invalidado",
 		"",
 		true,  // auto-ack
@@ -86,23 +82,20 @@ func Consume(url) error {
 		false, // no-wait
 		nil,
 	)
-	if err != nil {
-		return err
-	}
 	// Leilao vencedor
 	_, err = ch.QueueDeclare(
 		"leilao_vencedor", // name
-		true,  // durable
+		false,  // durable
 		false, // auto-delete
 		false, // exclusive
 		false, // no-wait
 		nil,   // arguments
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	lance_validado_msgs, err := ch.Consume(
+	leilao_vencedor_msgs, _ := ch.Consume(
 		"leilao_vencedor",
 		"",
 		true,  // auto-ack
@@ -111,9 +104,6 @@ func Consume(url) error {
 		false, // no-wait
 		nil,
 	)
-	if err != nil {
-		return err
-	}
 
 
 	eventChannel := make(chan EventMessage)
@@ -125,45 +115,50 @@ func Consume(url) error {
 				var bid Bid
 				err := json.Unmarshal(msg.Body, &bid)
 				if err != nil {
-					log.Printf("Error unmarshalling message: %v", err)
+					log.Printf("Error unmarshalling message for lance_validado: %v", err)
+					log.Printf("Raw message body: %s", msg.Body)
+
 					continue
 				}
 				log.Printf("Received valid bid: %+v", bid)
 				eventChannel <- EventMessage{
 					AuctionId: int(bid.AuctionID),
 					EventType: "lance_validado",
-					Data:      msg.Body,
+					Data:      string(msg.Body),
 				}
 			case msg := <-lance_invalidado_msgs:
 				var bid Bid
 				err := json.Unmarshal(msg.Body, &bid)
 				if err != nil {
-					log.Printf("Error unmarshalling message: %v", err)
+					log.Printf("Error unmarshalling message for lance_invalidado: %v", err)
+					log.Printf("Raw message body: %s", msg.Body)
+
 					continue
 				}
 				log.Printf("Received invalid bid: %+v", bid)
 				eventChannel <- EventMessage{
 					AuctionId: int(bid.AuctionID),
 					EventType: "lance_invalidado",
-					Data:      msg.Body,
+					Data:      string(msg.Body),
 				}
 			case msg := <-leilao_vencedor_msgs:
 				var bid Bid
 				err := json.Unmarshal(msg.Body, &bid)
 				if err != nil {
-					log.Printf("Error unmarshalling message: %v", err)
+					log.Printf("Error unmarshalling message for leilao_vencedor: %v", err)
+					log.Printf("Raw message body: %s", msg.Body)
 					continue
 				}
 				log.Printf("Received winner: %+v", bid)
 				eventChannel <- EventMessage{
 					AuctionId: int(bid.AuctionID),
 					EventType: "leilao_vencedor",
-					Data:      msg.Body,
+					Data:      string(msg.Body),
 				}
 			}
 		}
 	}()
 
 	
-	return eventChannel
+	return eventChannel, nil
 }

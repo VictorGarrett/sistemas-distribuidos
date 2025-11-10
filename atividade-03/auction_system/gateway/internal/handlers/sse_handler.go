@@ -4,18 +4,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"encoding/json"
+	"io"
+	"gateway/internal/rabbitmq"
 )
 
 type Client struct {
 	ClientID int
-	Events chan []byte
+	Events chan rabbitmq.EventMessage
 }
 
-type EventMessage struct {
-	EventType string
-	AuctionId int
-	data 	[]byte
-}
 
 
 func contains(slice []int, value int) bool {
@@ -31,12 +29,12 @@ func contains(slice []int, value int) bool {
 type SseBroker struct {
 	// Channel to broadcast events to.
 	// We'll pass this to our RabbitMQ consumer.
-	Broadcast chan []byte
+	Broadcast chan rabbitmq.EventMessage
 
 	// Internal channels for managing clients
 	newClients    chan Client
 	closedClients chan int
-	clients       	
+	clients       map[int]chan rabbitmq.EventMessage	
 
 	clientInterests map[int][]int
 }
@@ -44,10 +42,10 @@ type SseBroker struct {
 // NewSseBroker creates and starts a new SseBroker.
 func NewSseBroker() *SseBroker {
 	broker := &SseBroker{
-		Broadcast:     make(chan []byte),
+		Broadcast:     make(chan rabbitmq.EventMessage),
 		newClients:    make(chan Client),
 		closedClients: make(chan int),
-		clients:       make(map[int]chan []byte),
+		clients:       make(map[int]chan rabbitmq.EventMessage),
 	}
 
 	// Start the broker's event loop in a goroutine
@@ -78,13 +76,12 @@ func (b *SseBroker) run() {
 		select {
 		case client := <-b.newClients:
 			// A new client has connected. Add it to the map
-			b.clients[client.ClientID] = Client.Events
+			b.clients[client.ClientID] = client.Events
 			log.Println("SSE client added. Total clients:", len(b.clients))
 
 		case client := <-b.closedClients:
 			// A client has disconnected. Remove it from the map
 			delete(b.clients, client)
-			close(client) // Close the channel
 			log.Println("SSE client removed. Total clients:", len(b.clients))
 
 		case event := <-b.Broadcast:
@@ -129,18 +126,35 @@ func (h *SseHandler) HandleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a new channel for this specific client
-	messageChan := make(chan []byte, 10) // Buffered channel
+	// Extract client ID from query (e.g. /events?clientID=123)
+	clientIDStr := r.URL.Query().Get("clientID")
+	if clientIDStr == "" {
+		http.Error(w, "missing clientID query parameter", http.StatusBadRequest)
+		return
+	}
 
-	// Register the new client with the broker
-	h.broker.newClients <- messageChan
+	var clientID int
+	if _, err := fmt.Sscan(clientIDStr, &clientID); err != nil {
+		http.Error(w, "invalid clientID", http.StatusBadRequest)
+		return
+	}
+
+	// Create the client with its own Event channel
+	clientEvents := make(chan rabbitmq.EventMessage, 10)
+	client := Client{
+		ClientID: clientID,
+		Events:   clientEvents,
+	}
+
+	// Register the client with the broker
+	h.broker.newClients <- client
 
 	// Get the request context to detect client disconnect
 	ctx := r.Context()
 
 	// Defer unregistering the client when the handler exits
 	defer func() {
-		h.broker.closedClients <- messageChan
+		h.broker.closedClients <- clientID
 	}()
 
 	// Start the event loop for this client
@@ -150,10 +164,15 @@ func (h *SseHandler) HandleEvents(w http.ResponseWriter, r *http.Request) {
 			// Client disconnected
 			return
 
-		case message := <-messageChan:
+		case message := <-clientEvents:
 			// Received a message from the broker. Send it to the client.
 			// The SSE format is "data: <message>\n\n"
-			_, err := fmt.Fprintf(w, "data: %s\n\n", message)
+			payload, err := json.Marshal(message)
+			if err != nil {
+				// Failed to serialize message; treat as client disconnect or skip
+				return
+			}
+			_, err = fmt.Fprintf(w, "data: %s\n\n", payload)
 			if err != nil {
 				// Error most likely means client disconnected
 				return
