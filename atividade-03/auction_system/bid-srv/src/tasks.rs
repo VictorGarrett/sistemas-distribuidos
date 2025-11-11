@@ -13,6 +13,13 @@ use rsa::{
     RsaPublicKey, 
     Pkcs1v15Sign
 };
+use axum::{
+    extract::State,
+    routing::post,
+    Json, Router,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use sha2::{Digest, Sha256};
 use base64::engine::general_purpose;
 use base64::Engine;
@@ -69,50 +76,111 @@ pub async fn task_end_auction(
     }
 }
 
+#[derive(Clone)]
+struct AppState {
+    auctions: Arc<Mutex<Vec<Auction>>>,
+    bids: Arc<Mutex<Vec<Bid>>>,
+    conn: Arc<Connection>,
+    public_keys: Vec<Option<RsaPublicKey>>,
+}
+
 pub async fn task_validate_bid(
     auctions: Arc<Mutex<Vec<Auction>>>,
     bids: Arc<Mutex<Vec<Bid>>>,
     conn: Arc<Connection>,
 ) {
 
-    let channel = conn.create_channel().await.unwrap();
-
-    let mut consumer = channel.basic_consume(
-        "lance_realizado", 
-        "bid-srv", 
-        BasicConsumeOptions::default(), 
-        FieldTable::default()
-    ).await.unwrap();
 
     let public_keys = load_public_keys_vec("bid-srv/keys").unwrap();
 
-    while let Some(delivery) = consumer.next().await {
-        let delivery = delivery.unwrap();
-        delivery.ack(Default::default()).await.unwrap();
+    let app_state = Arc::new(AppState {
+        auctions: auctions,
+        bids: bids,
+        conn: conn,
+        public_keys: public_keys,
+    });
 
-        let bid: Bid = serde_json::from_slice(&delivery.data).unwrap();
-        println!("Received delivery on lance_realizado");
-        dbg!(&bid);
+    let app = Router::new()
+        .route("/bid", post(make_bid_handler))
+        .with_state(app_state);
 
-        //let public_key = RsaPublicKey::from_public_key_pem(bid.public_key.as_str()).unwrap();
-        let public_key = public_keys.get(bid.client_id as usize).unwrap().clone().unwrap();
-        let bid_is_valid = is_bid_valid(
-            &bid,
-            &auctions,
-            &bids,
-            public_key
-        ).await;
-        if bid_is_valid {
-            let mut bids = bids.lock().await;
-            bids.push(bid.clone());
-            drop(bids); //ensures lock is released before next iteration
+    let addr: std::net::SocketAddr = "127.0.0.1:8081".parse().unwrap();
+    println!("REST API listening on {}", addr);
 
-            publish_validated_bid(&channel, &bid).await.unwrap();
-        } else {
-            println!("Bid was deemed invalid, if nothing else, because of signature verification failure" );
+    // 1. Bind a tokio::net::TcpListener
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+
+    // 2. Use axum::serve to run the server
+    axum::serve(listener, app.into_make_service()) // 'app' is your axum Router
+        .await
+        .unwrap();
+
+    
+
+}
+
+async fn make_bid_handler(
+    State(state): State<Arc<AppState>>, 
+    Json(bid): Json<Bid>,          
+) -> Response {                    
+    
+    println!("Received bid via HTTP POST");
+    dbg!(&bid);
+
+    let public_key = match state.public_keys.get(bid.client_id as usize) {
+        Some(Some(key)) => key.clone(),
+        _ => {
+            println!("Invalid client ID or key not found for: {}", bid.client_id);
+            return (StatusCode::BAD_REQUEST, "Invalid client ID or key not found").into_response();
         }
-    }
+    };
 
+    let bid_is_valid = is_bid_valid(
+        &bid,
+        &state.auctions,
+        &state.bids,
+        public_key
+    ).await;
+
+
+    if bid_is_valid {
+        // Add to bids vector
+        let mut bids_lock = state.bids.lock().await;
+        bids_lock.push(bid.clone());
+        drop(bids_lock); // Release lock
+
+        let channel = match state.conn.create_channel().await {
+            Ok(channel) => channel,
+            Err(e) => {
+                eprintln!("Failed to create RabbitMQ channel: {}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to connect to queue").into_response();
+            }
+        };
+
+        if let Err(e) = publish_validated_bid(&channel, &bid).await {
+            eprintln!("Failed to publish validated bid: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Bid saved, but failed to publish").into_response();
+        }
+
+        (StatusCode::CREATED, "Bid accepted").into_response()
+    } else {
+        println!("Bid was deemed invalid");
+
+        let channel = match state.conn.create_channel().await {
+            Ok(channel) => channel,
+            Err(e) => {
+                eprintln!("Failed to create RabbitMQ channel: {}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to connect to queue").into_response();
+            }
+        };
+
+        if let Err(e) = publish_invalidated_bid(&channel, &bid).await{
+            eprintln!("Failed to publish invalidated bid: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Bid saved, but failed to publish").into_response();
+        }
+        
+        (StatusCode::BAD_REQUEST, "Bid was deemed invalid (e.g., signature failure)").into_response()
+    }
 }
 
 pub async fn task_init_auction(
@@ -191,6 +259,27 @@ async fn publish_validated_bid(
         .await?
         .await?;
     println!("Published Validated bid on lance_validado");
+    dbg!(bid);
+
+    Ok(())
+}
+
+async fn publish_invalidated_bid(
+    channel: &Channel, 
+    bid: &Bid
+) -> Result<(), Box<dyn std::error::Error>> {
+    let payload = serde_json::to_vec(bid)?;
+    channel
+        .basic_publish(
+            "",
+            "lance_invalidado",
+            BasicPublishOptions::default(),
+            &payload,
+            lapin::BasicProperties::default(),
+        )
+        .await?
+        .await?;
+    println!("Published Validated bid on lance_invalidado");
     dbg!(bid);
 
     Ok(())

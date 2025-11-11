@@ -122,6 +122,12 @@ async fn init_lance_validado(channel: &Channel) -> Result<(), Box<dyn std::error
         FieldTable::default(),
     ).await?;
 
+    channel.queue_declare(
+        "lance_invalidado",
+        QueueDeclareOptions::default(), 
+        FieldTable::default(),
+    ).await?;
+
     Ok(())
 }
 
