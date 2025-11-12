@@ -2,16 +2,33 @@ package main
 
 import (
 	"context"
+	"gateway/internal/handlers"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-	"gateway/internal/handlers"
+
 	//"gateway/internal/rabbitmq"
 	"gateway/internal/services"
 )
+
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*") // or "http://localhost:5173"
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		// Handle preflight requests
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
 
 func main() {
 	// Configuration (can be overridden with environment variables)
@@ -28,8 +45,8 @@ func main() {
 	bidHandler := handlers.NewBidHandler(bidSvc)
 
 	sseBroker := handlers.NewSseBroker()
-    // 2. Create the SSE handler, giving it the broker.
-    sseHandler := handlers.NewSseHandler(sseBroker)
+	// 2. Create the SSE handler, giving it the broker.
+	sseHandler := handlers.NewSseHandler(sseBroker)
 
 	// Start RabbitMQ consumer
 	//go func() {
@@ -37,7 +54,7 @@ func main() {
 	//		log.Printf("RabbitMQ consumer error: %v", err)
 	//	}
 	//}()
-	
+
 	// Setup HTTP server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/auctions", handler.HandleAuctions)
@@ -46,12 +63,9 @@ func main() {
 	mux.HandleFunc("/api/v1/subscribe", sseHandler.HandleSubscribe)
 	mux.HandleFunc("/api/v1/unsubscribe", sseHandler.HandleUnsubscribe)
 
-
-	
-
 	server := &http.Server{
 		Addr:    ":" + port,
-		Handler: mux,
+		Handler: withCORS(mux),
 	}
 
 	// Graceful shutdown
