@@ -25,7 +25,7 @@ interface NotificationItem {
   data: string;
 }
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = 'http://localhost:9090';
 
 const USER_ID = Math.floor(Math.random() * 5000);
 
