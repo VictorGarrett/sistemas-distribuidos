@@ -1,31 +1,39 @@
 import './App.css';
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Plus, Gavel } from 'lucide-react';
+import { Bell, Gavel } from 'lucide-react';
+import axios from 'axios';
 
 // Types
 interface Auction {
   id: number;
-  produto: string;
-  descricao: string;
-  inicioLeilao: string;
-  fimLeilao: string;
-  maiorLance: number;
+  item: string;
+  start_timestamp: number;
+  end_timestamp: string;
+  status: boolean;
 }
 
 interface Notification {
-  id: string;
-  message: string;
-  timestamp: Date;
-  type: 'bid' | 'ended' | 'payment' | 'info';
+  event_type: string;
+  auction_id: number;
+  data: string;
+}
+
+interface NotificationItem {
+  id: number,
+  event_type: string;
+  auction_id: number;
+  data: string;
 }
 
 const API_BASE_URL = 'http://localhost:8080/api';
 
+const USER_ID = Math.floor(Math.random() * 5000);
+
 const AuctionSystem: React.FC = () => {
-  const [userId, setUserId] = useState<string>('');
+  const [userId, setUserId] = useState<number>(-1);
   const [activeScreen, setActiveScreen] = useState<'auctions' | 'create'>('auctions');
   const [auctions, setAuctions] = useState<Auction[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [subscribedAuctions, setSubscribedAuctions] = useState<Set<number>>(new Set());
 
   const [bidAuctionId, setBidAuctionId] = useState<string>('');
@@ -57,31 +65,40 @@ const AuctionSystem: React.FC = () => {
   }, []);
 
   const fetchUserId = async () => {
-    const mockUserId = `user-${Math.random().toString(36).substr(2, 9)}`;
-    setUserId(mockUserId);
+    setUserId(USER_ID);
   };
 
   const setupSSEConnection = () => {
     console.log('SSE connection would be established here for user:', userId);
   };
 
-  const handleNotification = (notification: any) => {
-    const newNotification: Notification = {
-      id: Math.random().toString(36),
-      message: notification.message,
-      timestamp: new Date(),
-      type: notification.type || 'info'
+  const handleNotification = (newNotification: Notification) => {
+    let something: NotificationItem = {
+      id: notifications.length,
+      ...newNotification,
     };
-    setNotifications(prev => [newNotification, ...prev].slice(0, 50));
+
+    setNotifications(prev => [something, ...prev]);
   };
 
   const fetchAuctions = async () => {
-    console.log('Fetching active auctions...');
+      let auctions: Auction[] = await axios.get(`${API_BASE_URL}/api/v1/auctions`);
+      setAuctions(auctions);
   };
 
   const placeBid = async () => {
     if (!bidAuctionId || !bidAmount) return;
     console.log('Placing bid:', { auctionId: bidAuctionId, amount: bidAmount, userId });
+    let res = axios.post(`${API_BASE_URL}/api/v1/bid`, {
+      auction_id: bidAuctionId,
+      client_id: USER_ID,
+      value: Number(bidAmount),
+      signature: "",
+      public_key: "",
+      valid: true,
+    });
+    console.log(res);
+
     setBidAuctionId('');
     setBidAmount('');
     fetchAuctions();
@@ -103,6 +120,12 @@ const AuctionSystem: React.FC = () => {
 
   const createAuction = async () => {
     console.log('Creating auction:', newAuction);
+
+    axios.post(`${API_BASE_URL}/api/v1/auction`, {
+      item: newAuction.produto,
+      start_timestamp: new Date(newAuction.inicioLeilao).getMilliseconds() || Date.now(),
+      end_timestap: new Date(newAuction.fimLeilao).getMilliseconds() || Date.now() + 5 * 60 * 1000,
+    })
     clearForm();
     fetchAuctions();
   };
@@ -114,13 +137,6 @@ const AuctionSystem: React.FC = () => {
       inicioLeilao: '',
       fimLeilao: ''
     });
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
   };
 
   return (
@@ -137,8 +153,7 @@ const AuctionSystem: React.FC = () => {
           ) : (
             notifications.map(notification => (
               <li key={notification.id} className="notification-item">
-                <p>{notification.message}</p>
-                <span>{notification.timestamp.toLocaleTimeString('pt-BR')}</span>
+                <p>{notification.data}</p>
               </li>
             ))
           )}
@@ -214,9 +229,7 @@ const AuctionSystem: React.FC = () => {
                   auctions.map(auction => (
                     <div key={auction.id} className="auction-item">
                       <div className="auction-info">
-                        <h3>{auction.produto}</h3>
-                        <p>{auction.descricao}</p>
-                        <p>Maior Lance: {formatCurrency(auction.maiorLance)}</p>
+                        <h3>{auction.item}</h3>
                       </div>
                       <button
                         className={`subscribe-btn ${
