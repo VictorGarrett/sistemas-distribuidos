@@ -30,7 +30,7 @@ const API_BASE_URL = 'http://localhost:9090';
 const USER_ID = Math.floor(Math.random() * 5000);
 
 const AuctionSystem: React.FC = () => {
-  const [userId, setUserId] = useState<number>(-1);
+  const [userId, setUserId] = useState<number>(0);
   const [activeScreen, setActiveScreen] = useState<'auctions' | 'create'>('auctions');
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -46,14 +46,14 @@ const AuctionSystem: React.FC = () => {
     fimLeilao: ''
   });
 
-  let eventSource = null;
+  let eventSource: EventSource;
 
   useEffect(() => {
     fetchUserId();
   }, []);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || eventSource != undefined) return;
     setupSSEConnection();
   }, [userId]);
 
@@ -249,6 +249,7 @@ const AuctionSystem: React.FC = () => {
                   auctions.map(auction => (
                     <div key={auction.id} className="auction-item">
                       <div className="auction-info">
+                        <h3>{auction.id}</h3>
                         <h3>{auction.item}</h3>
                       </div>
                       <button
