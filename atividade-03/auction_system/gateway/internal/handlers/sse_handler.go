@@ -71,7 +71,7 @@ func (b *SseBroker) run() {
 		case client := <-b.newClients:
 			// A new client has connected. Add it to the map
 			b.clients[client.ClientID] = client.Events
-			log.Println("SSE client added. Total clients:", len(b.clients))
+			log.Printf("Received SSE add request: %d", client.ClientID)
 
 		case client := <-b.closedClients:
 			// A client has disconnected. Remove it from the map
@@ -79,10 +79,13 @@ func (b *SseBroker) run() {
 			log.Println("SSE client removed. Total clients:", len(b.clients))
 
 		case event := <-b.Broadcast:
+			log.Printf("Received event: %+v", event)
 			// A new event has arrived. Broadcast it to all clients.
 			for id, ch := range b.clients {
-
+				log.Printf("Client Interests: %+v", b.clientInterests)
 				if contains(b.clientInterests[id], event.AuctionId) {
+					log.Printf("Client ID: %d, Channel: %v", id, ch)
+
 					select {
 					case ch <- event:
 						// Message sent
@@ -159,6 +162,7 @@ func (h *SseHandler) HandleEvents(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case message := <-clientEvents:
+			log.Println("SSE channel received msg")
 			// Received a message from the broker. Send it to the client.
 			// The SSE format is "data: <message>\n\n"
 			payload, err := json.Marshal(message)
@@ -166,6 +170,7 @@ func (h *SseHandler) HandleEvents(w http.ResponseWriter, r *http.Request) {
 				// Failed to serialize message; treat as client disconnect or skip
 				return
 			}
+			log.Println("SSE message sent: ", payload)
 			_, err = fmt.Fprintf(w, "data: %s\n\n", payload)
 			if err != nil {
 				// Error most likely means client disconnected
@@ -200,6 +205,7 @@ func (h *SseHandler) HandleSubscribe(w http.ResponseWriter, r *http.Request) {
 		h.broker.clientInterests = make(map[int][]int)
 	}
 
+	log.Printf("Subscribing Client ID: %d", requestData.ClientID)
 	h.broker.clientInterests[requestData.ClientID] = append(h.broker.clientInterests[requestData.ClientID], requestData.Auctions...)
 
 	resp := []byte(`{"status":"subscribed"}`)

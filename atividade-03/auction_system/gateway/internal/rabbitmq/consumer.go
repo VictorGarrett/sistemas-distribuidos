@@ -167,6 +167,7 @@ func Consume(url string) (chan EventMessage, error) {
 		for {
 			select {
 			case msg := <-lance_validado_msgs:
+				log.Printf("Received message from lance_validado queue: %s", msg.Body)
 				var bid Bid
 				err := json.Unmarshal(msg.Body, &bid)
 				if err != nil {
