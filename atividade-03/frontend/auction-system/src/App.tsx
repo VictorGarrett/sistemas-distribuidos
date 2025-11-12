@@ -25,7 +25,7 @@ interface NotificationItem {
   data: string;
 }
 
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = 'http://localhost:8080';
 
 const USER_ID = Math.floor(Math.random() * 5000);
 
@@ -79,7 +79,7 @@ const AuctionSystem: React.FC = () => {
     eventSource.onerror = (error) =>{
       console.log(`ERROR: ${error}`);
     };
-    
+
   };
 
   const handleNotification = (newNotification: Notification) => {
@@ -92,7 +92,8 @@ const AuctionSystem: React.FC = () => {
   };
 
   const fetchAuctions = async () => {
-      let auctions: Auction[] = await axios.get(`${API_BASE_URL}/api/v1/auctions`);
+      let res = await axios.get(`${API_BASE_URL}/api/v1/auctions`);
+      let auctions: Auction[] = JSON.parse(res.data);
       setAuctions(auctions);
   };
 
