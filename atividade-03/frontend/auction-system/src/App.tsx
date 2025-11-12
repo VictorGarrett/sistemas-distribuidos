@@ -72,7 +72,7 @@ const AuctionSystem: React.FC = () => {
     eventSource = new EventSource(`${API_BASE_URL}/api/v1/events?clientID=${USER_ID}`)
 
     eventSource.onmessage = (event) =>{
-      let newNotification: Notification = JSON.parse(event.data);
+      let newNotification: Notification = event.data;
       handleNotification(newNotification);
     };
 
