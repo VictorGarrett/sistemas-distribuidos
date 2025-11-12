@@ -1,28 +1,26 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
+	"gateway/internal/rabbitmq"
+	"io"
 	"log"
 	"net/http"
-	"encoding/json"
-	"io"
-	"gateway/internal/rabbitmq"
 )
 
 type Client struct {
 	ClientID int
-	Events chan rabbitmq.EventMessage
+	Events   chan rabbitmq.EventMessage
 }
 
-
-
 func contains(slice []int, value int) bool {
-    for _, v := range slice {
-        if v == value {
-            return true
-        }
-    }
-    return false
+	for _, v := range slice {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }
 
 // SseBroker manages active client connections and broadcasts events.
@@ -34,7 +32,7 @@ type SseBroker struct {
 	// Internal channels for managing clients
 	newClients    chan Client
 	closedClients chan int
-	clients       map[int]chan rabbitmq.EventMessage	
+	clients       map[int]chan rabbitmq.EventMessage
 
 	clientInterests map[int][]int
 }
@@ -56,12 +54,10 @@ func NewSseBroker() *SseBroker {
 // run is the broker's main event loop.
 func (b *SseBroker) run() {
 
-
 	eventChannel, err := rabbitmq.Consume("amqp://guest:guest@localhost:5672/")
-    if err != nil {
-        log.Fatalf("Failed to start RabbitMQ consumer: %v", err)
-    }
-
+	if err != nil {
+		log.Fatalf("Failed to start RabbitMQ consumer: %v", err)
+	}
 
 	// Start a goroutine to listen for messages and broadcast them
 	go func() {
@@ -69,8 +65,6 @@ func (b *SseBroker) run() {
 			b.Broadcast <- msg
 		}
 	}()
-
-	
 
 	for {
 		select {
@@ -87,7 +81,7 @@ func (b *SseBroker) run() {
 		case event := <-b.Broadcast:
 			// A new event has arrived. Broadcast it to all clients.
 			for id, ch := range b.clients {
-				
+
 				if contains(b.clientInterests[id], event.AuctionId) {
 					select {
 					case ch <- event:
