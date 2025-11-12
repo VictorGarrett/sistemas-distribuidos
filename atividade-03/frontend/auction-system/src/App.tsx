@@ -46,7 +46,7 @@ const AuctionSystem: React.FC = () => {
     fimLeilao: ''
   });
 
-  const eventSourceRef = useRef<EventSource | null>(null);
+  let eventSource = null;
 
   useEffect(() => {
     fetchUserId();
@@ -55,7 +55,6 @@ const AuctionSystem: React.FC = () => {
   useEffect(() => {
     if (!userId) return;
     setupSSEConnection();
-    return () => eventSourceRef.current?.close();
   }, [userId]);
 
   useEffect(() => {
@@ -70,6 +69,17 @@ const AuctionSystem: React.FC = () => {
 
   const setupSSEConnection = () => {
     console.log('SSE connection would be established here for user:', userId);
+    eventSource = new EventSource(`${API_BASE_URL}/api/v1/events?clientID=${USER_ID}`)
+
+    eventSource.onmessage = (event) =>{
+      let newNotification: Notification = JSON.parse(event.data);
+      handleNotification(newNotification);
+    };
+
+    eventSource.onerror = (error) =>{
+      console.log(`ERROR: ${error}`);
+    };
+    
   };
 
   const handleNotification = (newNotification: Notification) => {
@@ -104,13 +114,22 @@ const AuctionSystem: React.FC = () => {
     fetchAuctions();
   };
 
-  const subscribeToAuction = (auctionId: number) => {
+  const subscribeToAuction = async (auctionId: number) => {
     console.log('Subscribing to auction:', auctionId);
+    await axios.post(`${API_BASE_URL}/api/v1/subscribe`, {
+      client_id: USER_ID,
+      auctions: [auctionId]
+    });
     setSubscribedAuctions(prev => new Set(prev).add(auctionId));
   };
 
-  const unsubscribeFromAuction = (auctionId: number) => {
+  const unsubscribeFromAuction = async (auctionId: number) => {
     console.log('Unsubscribing from auction:', auctionId);
+    await axios.post(`${API_BASE_URL}/api/v1/unsubscribe`, {
+      client_id: USER_ID,
+      auctions: [auctionId]
+    });
+
     setSubscribedAuctions(prev => {
       const newSet = new Set(prev);
       newSet.delete(auctionId);
@@ -125,7 +144,8 @@ const AuctionSystem: React.FC = () => {
       item: newAuction.produto,
       start_timestamp: new Date(newAuction.inicioLeilao).getMilliseconds() || Date.now(),
       end_timestap: new Date(newAuction.fimLeilao).getMilliseconds() || Date.now() + 5 * 60 * 1000,
-    })
+    });
+
     clearForm();
     fetchAuctions();
   };
