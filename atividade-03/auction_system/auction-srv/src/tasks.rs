@@ -16,7 +16,6 @@ use shared::models::{
 
 #[derive(Deserialize)]
 pub struct CreateAuctionRequest {
-    pub id: u32,
     pub start_timestamp: u128,
     pub end_timestamp: u128,
     pub item_name: String,
@@ -61,13 +60,14 @@ async fn create_auction(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateAuctionRequest>,
 ) -> Result<Json<Auction>, axum::http::StatusCode> {
-    let auction = Auction {
-        id: req.id,
-        item: req.item_name,
-        start_timestamp: req.start_timestamp,
-        end_timestamp: req.end_timestamp,
-        status: true,
-    };
+    let started_auctions = state.started_auctions.lock().await;
+    let live_auctions = state.live_auctions.lock().await;
+    let auction = Auction::new(
+        (started_auctions.len() + live_auctions.len()) as u32, 
+        req.item_name, 
+        req.start_timestamp,
+        req.end_timestamp
+    );
 
     println!("Request for auction: {:?}", auction);
 
@@ -78,6 +78,7 @@ async fn create_auction(
 
     Ok(Json(auction))
 }
+
 
 async fn list_auctions(
     State(state): State<Arc<AppState>>,
