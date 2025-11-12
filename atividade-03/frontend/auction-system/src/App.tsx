@@ -19,7 +19,7 @@ interface Notification {
 }
 
 interface NotificationItem {
-  id: number,
+  timestamp: number,
   event_type: string;
   auction_id: number;
   data: string;
@@ -84,7 +84,7 @@ const AuctionSystem: React.FC = () => {
 
   const handleNotification = (newNotification: Notification) => {
     let something: NotificationItem = {
-      id: notifications.length,
+      timestamp: Date.now(),
       ...newNotification,
     };
 
@@ -172,7 +172,7 @@ const AuctionSystem: React.FC = () => {
             <li className="notification-empty">Nenhuma notificação</li>
           ) : (
             notifications.map(notification => (
-              <li key={notification.id} className="notification-item">
+              <li key={new Date(notification.timestamp).getUTCDate()} className="notification-item">
                 <p>{notification.data}</p>
               </li>
             ))
