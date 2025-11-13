@@ -313,8 +313,8 @@ async fn publish_winner_bid(
     let payload = serde_json::to_vec(bid)?;
     channel
         .basic_publish(
-            "",
             "leilao_vencedor",
+            "",
             BasicPublishOptions::default(),
             &payload,
             lapin::BasicProperties::default(),

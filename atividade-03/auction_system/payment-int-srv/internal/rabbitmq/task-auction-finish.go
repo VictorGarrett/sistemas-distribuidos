@@ -64,20 +64,44 @@ func (taf *TaskAuctionFinish) Run() error {
 		fmt.Printf("O I am slain")
 	}()
 
-	messages, err := taf.rmqChannel.Consume(
-		"leilao_vencedor",
-		"",
-		true,
-		false,
-		false,
-		false,
-		nil,
+	queue, err := taf.rmqChannel.QueueDeclare(
+		"",    // empty name to let RabbitMQ generate a random name
+		false, // durable
+		true,  // delete when unused
+		true,  // exclusive
+		false, // no-wait
+		nil,   // arguments
 	)
 	if err != nil {
-		fmt.Printf("Failed to create leilao_vencedor consumer %v", err)
-		return err
+		return fmt.Errorf("failed to declare a random queue: %v", err)
 	}
-	fmt.Println("Waiting for messages on queue 'leilao_vencedor'")
+	fmt.Printf("Declared random queue: %s\n", queue.Name)
+
+	err = taf.rmqChannel.QueueBind(
+		queue.Name,        // queue name
+		"",                // routing key
+		"leilao_vencedor", // exchange name
+		false,             // no-wait
+		nil,               // arguments
+	)
+	if err != nil {
+		return fmt.Errorf("failed to bind queue to exchange: %v", err)
+	}
+	fmt.Printf("Bound queue %s to exchange leilao_vencedor\n", queue.Name)
+
+	messages, err := taf.rmqChannel.Consume(
+		queue.Name, // queue name
+		"",         // consumer tag
+		true,       // auto-ack
+		false,      // exclusive
+		false,      // no-local
+		false,      // no-wait
+		nil,        // arguments
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create consumer: %v", err)
+	}
+	fmt.Println("Consumer created")
 
 	for msg := range messages {
 		fmt.Printf("Received message: %s\n", string(msg.Body))

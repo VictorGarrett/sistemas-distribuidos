@@ -93,11 +93,35 @@ func Consume(url string) (chan EventMessage, error) {
 		nil,
 	)
 	// Leilao vencedor
-	_, err = ch.QueueDeclare(
+	err = ch.ExchangeDeclare(
 		"leilao_vencedor", // name
+		"fanout",          // type
 		false,             // durable
-		false,             // auto-delete
-		false,             // exclusive
+		false,             // auto-deleted
+		false,             // internal
+		false,             // no-wait
+		nil,               // arguments
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	q, err := ch.QueueDeclare(
+		"",    // name (empty string for a random queue)
+		false, // durable
+		true,  // auto-delete
+		true,  // exclusive
+		false, // no-wait
+		nil,   // arguments
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = ch.QueueBind(
+		q.Name,            // queue name
+		"",                // routing key
+		"leilao_vencedor", // exchange
 		false,             // no-wait
 		nil,               // arguments
 	)
@@ -106,7 +130,7 @@ func Consume(url string) (chan EventMessage, error) {
 	}
 
 	leilao_vencedor_msgs, _ := ch.Consume(
-		"leilao_vencedor",
+		q.Name,
 		"",
 		true,  // auto-ack
 		false, // exclusive

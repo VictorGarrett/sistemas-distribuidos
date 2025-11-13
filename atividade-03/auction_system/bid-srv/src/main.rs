@@ -96,9 +96,10 @@ async fn init_rabbitmq_structs(conn: Arc<Connection>) -> Result<String, Box<dyn 
 }
 
 async fn init_leilao_vencedor(channel: &Channel) -> Result<(), Box<dyn std::error::Error>>{
-    let _leilao_vencedor_mq = channel.queue_declare(
+    channel.exchange_declare(
         "leilao_vencedor",
-        QueueDeclareOptions::default(), 
+        ExchangeKind::Fanout,
+        ExchangeDeclareOptions::default(),
         FieldTable::default(),
     ).await?;
 
