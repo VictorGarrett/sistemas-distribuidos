@@ -13,16 +13,16 @@ interface Auction {
 }
 
 interface Notification {
-  event_type: string;
-  auction_id: number;
-  data: string;
+  EventType: string;
+  AuctionId: number;
+  Data: string;
 }
 
 interface NotificationItem {
   timestamp: number,
-  event_type: string;
-  auction_id: number;
-  data: string;
+  EventType: string;
+  AuctionId: number;
+  Data: string;
 }
 
 const API_BASE_URL = 'http://localhost:9090';
@@ -72,7 +72,8 @@ const AuctionSystem: React.FC = () => {
     eventSource = new EventSource(`${API_BASE_URL}/api/v1/events?clientID=${USER_ID}`)
 
     eventSource.onmessage = (event) =>{
-      let newNotification: Notification = event.data;
+      let newNotification: Notification = JSON.parse(event.data);
+      console.log(newNotification);
       handleNotification(newNotification);
     };
 
@@ -100,7 +101,7 @@ const AuctionSystem: React.FC = () => {
     if (!bidAuctionId || !bidAmount) return;
     console.log('Placing bid:', { auctionId: bidAuctionId, amount: bidAmount, userId });
     let res = axios.post(`${API_BASE_URL}/api/v1/bid`, {
-      auction_id: bidAuctionId,
+      auction_id: +bidAuctionId,
       client_id: USER_ID,
       value: Number(bidAmount),
       signature: "",
@@ -171,9 +172,9 @@ const AuctionSystem: React.FC = () => {
           {notifications.length === 0 ? (
             <li className="notification-empty">Nenhuma notificação</li>
           ) : (
-            notifications.map(notification => (
-              <li key={new Date(notification.timestamp).getUTCDate()} className="notification-item">
-                <p>{notification.data}</p>
+            notifications.map((notification, index) => (
+              <li key={index} className="notification-item">
+                <p>{notification.Data}</p>
               </li>
             ))
           )}
