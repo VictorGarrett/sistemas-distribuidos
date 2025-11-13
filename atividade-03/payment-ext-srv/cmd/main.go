@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	port := flag.Int("port", 8080, "TCP port")
+	port := flag.Int("port", 7070, "TCP port")
 
 	err := godotenv.Load(".env")
 	if err != nil {

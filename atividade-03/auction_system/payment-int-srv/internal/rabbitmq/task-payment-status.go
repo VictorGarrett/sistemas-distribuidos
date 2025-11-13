@@ -44,7 +44,12 @@ func NewTaskPaymentStatus(
 	return &task, nil
 }
 
-func (taf *TaskPaymentStatus) Run() error {
+func (taf *TaskPaymentStatus) Run(conn *amqp.Connection) error {
+
+	amqpChannel, err := conn.Channel()
+	if err != nil {
+		return err
+	}
 	for msg := range taf.updatesChannel {
 		payment := taf.pm.GetPayment(msg.PaymentID)
 		body, err := json.Marshal(payment.ToPaymentUpdatePublish(&msg))
@@ -53,7 +58,7 @@ func (taf *TaskPaymentStatus) Run() error {
 			continue
 		}
 
-		taf.rmqChannel.Publish(
+		amqpChannel.Publish(
 			"",
 			"status_pagamento",
 			false,

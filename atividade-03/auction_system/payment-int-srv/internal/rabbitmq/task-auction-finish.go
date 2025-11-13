@@ -3,11 +3,11 @@ package rabbitmq
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"payment-srv/internal"
 	"payment-srv/internal/models"
 
-	"github.com/gofiber/fiber/v2/log"
 	"github.com/google/uuid"
 	"github.com/streadway/amqp"
 )
@@ -25,8 +25,11 @@ func NewTaskAuctionFinish(
 	linksChannel chan models.PaymentLink,
 ) (*TaskAuctionFinish, error) {
 
+	fmt.Println("Initializing TaskAuctionFinish")
+
 	amqpChannel, err := conn.Channel()
 	if err != nil {
+		fmt.Printf("Failed to create AMQP channel %v", err)
 		return nil, err
 	}
 
@@ -38,7 +41,7 @@ func NewTaskAuctionFinish(
 		false,
 		nil,
 	)
-
+	fmt.Println("Queue leilao_vencedor declared")
 	task := TaskAuctionFinish{
 		pm:           paymentManager,
 		rmqChannel:   amqpChannel,
@@ -48,8 +51,16 @@ func NewTaskAuctionFinish(
 	return &task, nil
 }
 
-func (taf *TaskAuctionFinish) Run() error {
-	messages, err := taf.rmqChannel.Consume(
+func (taf *TaskAuctionFinish) Run(conn *amqp.Connection) error {
+	fmt.Println("Running TaskAuctionFinish")
+
+	amqpChannel, err := conn.Channel()
+	if err != nil {
+		fmt.Printf("Failed to create AMQP channel %v", err)
+		return err
+	}
+
+	messages, err := amqpChannel.Consume(
 		"leilao_vencedor",
 		"",
 		true,
@@ -59,10 +70,13 @@ func (taf *TaskAuctionFinish) Run() error {
 		nil,
 	)
 	if err != nil {
+		fmt.Printf("Failed to create leilao_vencedor consumer %v", err)
 		return err
 	}
+	fmt.Println("Waiting for messages on queue 'leilao_vencedor'")
 
 	for msg := range messages {
+		fmt.Printf("Received message: %s\n", string(msg.Body))
 		var auctionWinner models.NewAuctionWinner
 		json.Unmarshal(msg.Body, &auctionWinner)
 
@@ -74,6 +88,7 @@ func (taf *TaskAuctionFinish) Run() error {
 			Link:      res.Link,
 		}
 	}
+	fmt.Println("ended TaskAuctionFinish")
 
 	return nil
 }
@@ -87,23 +102,23 @@ func (taf *TaskAuctionFinish) sendNewTransaction(auctionWinner *models.NewAuctio
 	body, _ := json.Marshal(transactionReq)
 
 	res, err := http.Post(
-		"service-url",
+		"localhost:7070/transaction",
 		"application/json",
 		bytes.NewBuffer(body),
 	)
 	defer res.Body.Close()
 
 	if err != nil {
-		log.Error("Some Error yadayada")
+		fmt.Println("Some Error yadayada")
 		return nil
 	}
 
 	var transactionResponse models.NewTransactionResponse
 	err = json.NewDecoder(res.Body).Decode(&transactionResponse)
 	if err != nil {
-		log.Error("Some Error yadayada")
+		fmt.Println("Some Error yadayada")
 		return nil
 	}
-
+	fmt.Printf("Received response: %+v\n", transactionResponse)
 	return &transactionResponse
 }

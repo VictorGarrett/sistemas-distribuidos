@@ -44,7 +44,13 @@ func NewTaskPaymentLink(
 	return &task, nil
 }
 
-func (taf *TaskPaymentLink) Run() error {
+func (taf *TaskPaymentLink) Run(conn *amqp.Connection) error {
+
+	amqpChannel, err := conn.Channel()
+	if err != nil {
+		return err
+	}
+
 	for msg := range taf.linksChannel {
 		payment := taf.pm.GetPayment(msg.PaymentID)
 		body, err := json.Marshal(payment.ToPaymentLinkPublish(&msg))
@@ -53,7 +59,8 @@ func (taf *TaskPaymentLink) Run() error {
 			continue
 		}
 
-		taf.rmqChannel.Publish(
+		log.Infof("Publishing payment link message: %s", string(body))
+		amqpChannel.Publish(
 			"",
 			"link_pagamento",
 			false,

@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	port := flag.Int("port", 8081, "HTTP server port")
+	port := flag.Int("port", 8082, "HTTP server port")
 
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -66,11 +66,13 @@ func main() {
 		log.Fatalf("Failed to Create TaskPaymentLink: %v", err)
 	}
 
-	go taskAuctionFinish.Run()
-	go taskPaymentStatus.Run()
-	go taskPaymentLink.Run()
+	go taskAuctionFinish.Run(conn)
+	go taskPaymentStatus.Run(conn)
+	go taskPaymentLink.Run(conn)
 
 	app := fiber.New()
 	app.Put("/api/update-payment/:payment-id", api.UpdatePayment(paymentManager))
+
+	log.Printf("App initiated on %s:%d", baseURL, *port)
 	app.Listen(baseURL + ":" + strconv.Itoa(*port))
 }
