@@ -10,7 +10,7 @@ import (
 )
 
 type TransactionManager struct {
-	Url                 string
+	BaseUrl             string
 	mutex               sync.Mutex
 	pendingTransactions map[uuid.UUID]models.Transaction
 	paidTransactions    map[uuid.UUID]models.Transaction
@@ -19,7 +19,7 @@ type TransactionManager struct {
 
 func NewTransactionManager(url string) *TransactionManager {
 	return &TransactionManager{
-		Url:                 url,
+		BaseUrl:             url,
 		pendingTransactions: make(map[uuid.UUID]models.Transaction),
 		paidTransactions:    make(map[uuid.UUID]models.Transaction),
 		expiredTransactions: make(map[uuid.UUID]models.Transaction),
@@ -42,7 +42,7 @@ func (pm *TransactionManager) CreateNewTransaction(req *models.NewTransactionReq
 	pm.pendingTransactions[payment.ID] = payment
 	pm.mutex.Unlock()
 
-	return payment.ToNewTransactionResponse(pm.Url + "/pay/" + payment.ID.String())
+	return payment.ToNewTransactionResponse(pm.BaseUrl + "/pay/" + payment.ID.String())
 }
 
 func (pm *TransactionManager) SetPaid(id uuid.UUID) error {
@@ -55,6 +55,7 @@ func (pm *TransactionManager) SetPaid(id uuid.UUID) error {
 	payment := pm.pendingTransactions[id]
 	delete(pm.pendingTransactions, id)
 	payment.Status = string(models.Paid)
+	payment.PaidAt = time.Now().Unix()
 
 	pm.paidTransactions[payment.ID] = payment
 
@@ -74,4 +75,24 @@ func (pm *TransactionManager) GetTransaction(id uuid.UUID) *models.Transaction {
 
 	transaction = pm.expiredTransactions[id]
 	return &transaction
+}
+
+func (pm *TransactionManager) GetAllTransactions() []models.Transaction {
+	transactions := make(
+		[]models.Transaction,
+		0,
+		len(pm.pendingTransactions)+len(pm.pendingTransactions)+len(pm.expiredTransactions),
+	)
+
+	for _, t := range pm.pendingTransactions {
+		transactions = append(transactions, t)
+	}
+	for _, t := range pm.paidTransactions {
+		transactions = append(transactions, t)
+	}
+	for _, t := range pm.expiredTransactions {
+		transactions = append(transactions, t)
+	}
+
+	return transactions
 }

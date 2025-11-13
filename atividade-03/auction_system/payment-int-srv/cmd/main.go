@@ -29,12 +29,15 @@ func main() {
 	updatesChannel := make(chan models.PaymentUpdate)
 	linksChannel := make(chan models.PaymentLink)
 
-	conn, err := amqp.Dial("rabbitmq-link")
+	conn, err := amqp.Dial("amqp://guest:guest@127.0.0.1:5672/%2f")
 	if err != nil {
 		log.Fatalf("Failed to connect to rabbitmq: %v", err)
 	}
 
-	paymentManager := internal.NewPaymentManager(baseURL, updatesChannel)
+	paymentManager := internal.NewPaymentManager(
+		"http://"+baseURL+":"+strconv.Itoa(*port),
+		updatesChannel,
+	)
 
 	taskAuctionFinish, err := rabbitmq.NewTaskAuctionFinish(
 		paymentManager,

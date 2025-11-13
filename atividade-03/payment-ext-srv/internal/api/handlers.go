@@ -30,7 +30,7 @@ func HandleNewTransaction(pm *internal.TransactionManager) fiber.Handler {
 
 func HandleTransactionPay(pm *internal.TransactionManager) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		tid, err := uuid.Parse(c.Query("tid"))
+		tid, err := uuid.Parse(c.Params("tid"))
 		if err != nil {
 			log.Errorf("Invalid Query parameter \"tid\": %v", err)
 			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
@@ -46,8 +46,15 @@ func HandleTransactionPay(pm *internal.TransactionManager) fiber.Handler {
 		}
 
 		transaction := pm.GetTransaction(tid)
-		http.Post(transaction.Callback, "application/json", nil)
+		http.Post(transaction.Callback+"/"+tid.String(), "application/json", nil)
 
 		return c.SendStatus(fiber.StatusOK)
+	}
+}
+
+func HandleGetTransaction(pm *internal.TransactionManager) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		transactions := pm.GetAllTransactions()
+		return c.Status(fiber.StatusOK).JSON(transactions)
 	}
 }
