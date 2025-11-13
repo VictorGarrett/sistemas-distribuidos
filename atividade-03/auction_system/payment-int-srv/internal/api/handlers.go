@@ -1,20 +1,33 @@
 package api
 
 import (
+	"fmt"
 	"payment-srv/internal"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/log"
 	"github.com/google/uuid"
 )
 
+type Payment struct {
+	Pid string `json:"pid"`
+}
+
 func UpdatePayment(pm *internal.PaymentManager) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		paymentIDStr := c.Params("payment-id", "")
-		paymentUUID, err := uuid.Parse(paymentIDStr)
+
+		var payment Payment
+		if err := c.BodyParser(&payment); err != nil {
+			fmt.Printf("Failed to parse request body to Payment type: %v\n", err)
+			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
+				"error": "Failed",
+			})
+		}
+
+		fmt.Printf("Received request: %v\n", c.Body())
+		paymentUUID, err := uuid.Parse(payment.Pid)
 
 		if err != nil {
-			log.Errorf("Failed to extract paymentID from route: %v", err)
+			fmt.Printf("Failed to extract paymentID from route: %v\n", err)
 			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
 				"error": "Failed",
 			})
@@ -22,7 +35,7 @@ func UpdatePayment(pm *internal.PaymentManager) fiber.Handler {
 
 		err = pm.SetPaid(paymentUUID)
 		if err != nil {
-			log.Errorf("Failed to pay request: %v", err)
+			fmt.Printf("Failed to pay request: %v\n", err)
 			return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
 				"error": "Failed",
 			})

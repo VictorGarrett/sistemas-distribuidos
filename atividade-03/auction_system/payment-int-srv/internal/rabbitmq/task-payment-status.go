@@ -2,6 +2,7 @@ package rabbitmq
 
 import (
 	"encoding/json"
+	"fmt"
 	"payment-srv/internal"
 	"payment-srv/internal/models"
 
@@ -47,6 +48,8 @@ func NewTaskPaymentStatus(
 func (taf *TaskPaymentStatus) Run() error {
 
 	for msg := range taf.updatesChannel {
+		fmt.Printf("Received msg: %v\n", msg)
+
 		payment := taf.pm.GetPayment(msg.PaymentID)
 		body, err := json.Marshal(payment.ToPaymentUpdatePublish(&msg))
 		if err != nil {
@@ -65,6 +68,8 @@ func (taf *TaskPaymentStatus) Run() error {
 				DeliveryMode: amqp.Transient,
 			},
 		)
+		fmt.Printf("msg published: %v\n", body)
+
 	}
 
 	return nil

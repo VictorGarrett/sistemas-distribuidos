@@ -2,6 +2,7 @@ package internal
 
 import (
 	"errors"
+	"fmt"
 	"payment-srv/internal/models"
 	"sync"
 	"time"
@@ -49,6 +50,7 @@ func (pm *PaymentManager) CreateNewPayment(req *models.NewAuctionWinner, id uuid
 }
 
 func (pm *PaymentManager) SetPaid(id uuid.UUID) error {
+	fmt.Printf("Set payment\n")
 	pm.mutex.Lock()
 	defer pm.mutex.Unlock()
 	if _, ok := pm.pendingPayments[id]; !ok {

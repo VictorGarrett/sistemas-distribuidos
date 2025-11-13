@@ -27,7 +27,7 @@ func main() {
 
 	app := fiber.New()
 	app.Post("/transaction", api.HandleNewTransaction(pm))
-	app.Post("/transaction/pay/:tid", api.HandleTransactionPay(pm))
+	app.Post("/pay/:tid", api.HandleTransactionPay(pm))
 	app.Get("/transaction", api.HandleGetTransaction(pm))
 	app.Listen(baseURL + ":" + strconv.Itoa(*port))
 }

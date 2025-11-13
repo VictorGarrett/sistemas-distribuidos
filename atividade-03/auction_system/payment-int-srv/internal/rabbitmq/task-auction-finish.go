@@ -130,23 +130,23 @@ func (taf *TaskAuctionFinish) Run() error {
 func (taf *TaskAuctionFinish) sendNewTransaction(auctionWinner *models.NewAuctionWinner) *models.NewTransactionResponse {
 	transactionReq := &models.NewTransactionRequest{
 		Amount:   auctionWinner.Amount,
-		Callback: taf.pm.Url + "/api/update-payment/",
+		Callback: taf.pm.Url + "/api/update-payment",
 	}
 
 	body, _ := json.Marshal(transactionReq)
 
 	res, err := http.Post(
-		"localhost:7070/transaction",
+		"http://localhost:7070/transaction",
 		"application/json",
 		bytes.NewBuffer(body),
 	)
-	defer res.Body.Close()
 
 	if err != nil {
-		fmt.Println("Some Error yadayada")
+		fmt.Println("Failed to req from ext payment srv", err)
 		return nil
 	}
 
+	defer res.Body.Close()
 	var transactionResponse models.NewTransactionResponse
 	err = json.NewDecoder(res.Body).Decode(&transactionResponse)
 	if err != nil {

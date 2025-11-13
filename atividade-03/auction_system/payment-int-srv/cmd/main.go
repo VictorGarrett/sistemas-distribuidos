@@ -71,7 +71,7 @@ func main() {
 	go taskPaymentLink.Run()
 
 	app := fiber.New()
-	app.Put("/api/update-payment/:payment-id", api.UpdatePayment(paymentManager))
+	app.Post("/api/update-payment", api.UpdatePayment(paymentManager))
 
 	log.Printf("App initiated on %s:%d", baseURL, *port)
 	app.Listen(baseURL + ":" + strconv.Itoa(*port))
