@@ -18,6 +18,7 @@ type Bid struct {
 
 type PaymentLink struct {
 	AuctionID uint32  `json:"auction_id"`
+	ClientID  uint32  `json:"client_id"`
 	Value     float64 `json:"value"`
 	Link      string  `json:"link"`
 }

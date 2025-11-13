@@ -111,13 +111,13 @@ fn get_auctions() -> Vec<Auction> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
     vec![
         Auction::new(
-            1, 
+            0, 
             "1L de água de poça".to_string(), 
             now,
             now + 3 * 60 * 1000,        
         ),
         Auction::new(
-            2, 
+            1, 
             "bituca de cigarro".to_string(), 
             now + 60 *1000,
             now + 6 * 60 * 1000,

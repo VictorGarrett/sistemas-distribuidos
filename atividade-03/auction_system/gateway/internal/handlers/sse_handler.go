@@ -14,6 +14,20 @@ type Client struct {
 	Events   chan rabbitmq.EventMessage
 }
 
+type PaymentLink struct {
+	AuctionID uint32  `json:"auction_id"`
+	ClientID  uint32  `json:"client_id"`
+	Value     float64 `json:"value"`
+	Link      string  `json:"link"`
+}
+
+type PaymentStatus struct {
+	AuctionID uint32  `json:"auction_id"`
+	ClientID  uint32  `json:"client_id"`
+	Value     float64 `json:"value"`
+	Status    string  `json:"link"`
+}
+
 func contains(slice []int, value int) bool {
 	for _, v := range slice {
 		if v == value {
@@ -165,6 +179,26 @@ func (h *SseHandler) HandleEvents(w http.ResponseWriter, r *http.Request) {
 			log.Println("SSE channel received msg")
 			// Received a message from the broker. Send it to the client.
 			// The SSE format is "data: <message>\n\n"
+
+			if message.EventType == "link_pagamento" {
+				var event PaymentLink
+				json.Unmarshal([]byte(message.Data), &event)
+
+				if event.ClientID != uint32(clientID) {
+					// Not intended for this client
+					continue
+				}
+			}
+			if message.EventType == "status_pagamento" {
+				var event PaymentStatus
+				json.Unmarshal([]byte(message.Data), &event)
+
+				if event.ClientID != uint32(clientID) {
+					// Not intended for this client
+					continue
+				}
+			}
+
 			payload, err := json.Marshal(message)
 			if err != nil {
 				// Failed to serialize message; treat as client disconnect or skip
@@ -191,7 +225,7 @@ func (h *SseHandler) HandleSubscribe(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	var requestData struct {
-		ClientID int   `json:"clientID"`
+		ClientID int   `json:"client_id"`
 		Auctions []int `json:"auctions"`
 	}
 
@@ -234,6 +268,7 @@ func (h *SseHandler) HandleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Printf("Unsubscribing Client ID: %d from auctions: %+v\n", requestData.ClientID, requestData.Auctions)
 	if h.broker.clientInterests == nil {
 		http.Error(w, "No subscriptions found", http.StatusBadRequest)
 		return

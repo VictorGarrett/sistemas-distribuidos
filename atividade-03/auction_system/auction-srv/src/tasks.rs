@@ -26,6 +26,7 @@ struct AppState {
     new_auction_tx: Sender<Auction>,
     live_auctions: Arc<Mutex<Vec<Auction>>>,
     started_auctions: Arc<Mutex<Vec<Auction>>>,
+    auction_counter: Arc<Mutex<u64>>
 }
 
 /// Task that runs the HTTP server and forwards auctions to the scheduler
@@ -37,7 +38,8 @@ pub async fn task_rest_api(
     let app_state = Arc::new(AppState {
         new_auction_tx,
         live_auctions,
-        started_auctions
+        started_auctions,
+        auction_counter: Arc::new(Mutex::new(2))
     });
 
     let app = Router::new()
@@ -62,12 +64,18 @@ async fn create_auction(
 ) -> Result<Json<Auction>, axum::http::StatusCode> {
     let started_auctions = state.started_auctions.lock().await;
     let live_auctions = state.live_auctions.lock().await;
+    let mut counter = state.auction_counter.lock().await;
+
+
+    
     let auction = Auction::new(
-        (started_auctions.len() + live_auctions.len()) as u32, 
+        (*counter) as u32, 
         req.item_name, 
         req.start_timestamp,
         req.end_timestamp
     );
+
+    *counter = *counter + 1;
 
     println!("Request for auction: {:?}", auction);
 

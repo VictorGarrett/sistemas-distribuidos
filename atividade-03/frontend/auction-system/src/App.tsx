@@ -125,7 +125,7 @@ const AuctionSystem: React.FC = () => {
   const subscribeToAuction = async (auctionId: number) => {
     console.log('Subscribing to auction:', auctionId);
     await axios.post(`${API_BASE_URL}/api/v1/subscribe`, {
-      clientID: USER_ID,
+      client_id: USER_ID,
       auctions: [auctionId]
     });
     setSubscribedAuctions(prev => new Set(prev).add(auctionId));
