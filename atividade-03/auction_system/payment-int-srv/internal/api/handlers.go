@@ -16,7 +16,7 @@ func UpdatePayment(pm *internal.PaymentManager) fiber.Handler {
 		if err != nil {
 			log.Errorf("Failed to extract paymentID from route: %v", err)
 			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-				"error": "Failed to fodasse",
+				"error": "Failed",
 			})
 		}
 
@@ -24,7 +24,7 @@ func UpdatePayment(pm *internal.PaymentManager) fiber.Handler {
 		if err != nil {
 			log.Errorf("Failed to pay request: %v", err)
 			return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
-				"error": "Failed to fodasse",
+				"error": "Failed",
 			})
 		}
 
