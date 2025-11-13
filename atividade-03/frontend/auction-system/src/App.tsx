@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Gavel } from 'lucide-react';
 import axios from 'axios';
 
+
 // Types
 interface Auction {
   id: number;
@@ -26,7 +27,7 @@ interface NotificationItem {
 }
 
 const API_BASE_URL = 'http://localhost:9090';
-
+const AUDIO_PATH = "https://www.myinstants.com/media/sounds/whatsapp.mp3";
 const USER_ID = Math.floor(Math.random() * 5000);
 
 const AuctionSystem: React.FC = () => {
@@ -47,6 +48,7 @@ const AuctionSystem: React.FC = () => {
   });
 
   let eventSource: EventSource;
+  let audio = new Audio(AUDIO_PATH);
 
   useEffect(() => {
     fetchUserId();
@@ -88,9 +90,14 @@ const AuctionSystem: React.FC = () => {
       timestamp: Date.now(),
       ...newNotification,
     };
-
+    playAudio();
     setNotifications(prev => [something, ...prev]);
   };
+
+  const playAudio = () =>{
+    audio.currentTime = 0;
+    audio.play().catch(_ => console.log("Playback Failed"));
+  }
 
   const fetchAuctions = async () => {
       let res = await axios.get(`${API_BASE_URL}/api/v1/auctions`);
