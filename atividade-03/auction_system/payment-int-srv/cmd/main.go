@@ -34,7 +34,10 @@ func main() {
 		log.Fatalf("Failed to connect to rabbitmq: %v", err)
 	}
 
-	paymentManager := internal.NewPaymentManager(baseURL, updatesChannel)
+	paymentManager := internal.NewPaymentManager(
+		"http://"+baseURL+":"+strconv.Itoa(*port),
+		updatesChannel,
+	)
 
 	taskAuctionFinish, err := rabbitmq.NewTaskAuctionFinish(
 		paymentManager,

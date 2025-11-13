@@ -66,7 +66,7 @@ func (taf *TaskAuctionFinish) Run() error {
 		var auctionWinner models.NewAuctionWinner
 		json.Unmarshal(msg.Body, &auctionWinner)
 
-		res := sendNewTransaction(&auctionWinner)
+		res := taf.sendNewTransaction(&auctionWinner)
 		transactionID, _ := uuid.Parse(res.ID)
 		taf.pm.CreateNewPayment(&auctionWinner, transactionID)
 		taf.linksChannel <- models.PaymentLink{
@@ -78,10 +78,10 @@ func (taf *TaskAuctionFinish) Run() error {
 	return nil
 }
 
-func sendNewTransaction(auctionWinner *models.NewAuctionWinner) *models.NewTransactionResponse {
+func (taf *TaskAuctionFinish) sendNewTransaction(auctionWinner *models.NewAuctionWinner) *models.NewTransactionResponse {
 	transactionReq := &models.NewTransactionRequest{
 		Amount:   auctionWinner.Amount,
-		Callback: "callback",
+		Callback: taf.pm.Url + "/api/update-payment/",
 	}
 
 	body, _ := json.Marshal(transactionReq)

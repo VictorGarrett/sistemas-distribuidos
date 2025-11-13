@@ -46,7 +46,7 @@ func HandleTransactionPay(pm *internal.TransactionManager) fiber.Handler {
 		}
 
 		transaction := pm.GetTransaction(tid)
-		http.Post(transaction.Callback, "application/json", nil)
+		http.Post(transaction.Callback+"/"+tid.String(), "application/json", nil)
 
 		return c.SendStatus(fiber.StatusOK)
 	}
