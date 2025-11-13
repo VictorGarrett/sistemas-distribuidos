@@ -172,11 +172,56 @@ const AuctionSystem: React.FC = () => {
           {notifications.length === 0 ? (
             <li className="notification-empty">Nenhuma notificação</li>
           ) : (
-            notifications.map((notification, index) => (
-              <li key={index} className="notification-item">
-                <p>{notification.Data}</p>
-              </li>
-            ))
+            notifications.map((notification, index) => {
+                let dataObj = JSON.parse(notification.Data);
+                if(notification.EventType == 'status_pagamento'){
+                  return (
+                      <li key={index} className="notification-item">
+                        <h3>{"Atualização do Pagamento"}</h3>
+                        <p>{`Leilão: ${dataObj.auction_id}`}</p>
+                        <p>{`Status: ${dataObj.status}`}</p>
+                      </li>
+                    )
+                }
+
+                if(notification.EventType == 'link_pagamento'){
+                  return (
+                      <li key={index} className="notification-item">
+                        <h3>{"Link para pagamento"}</h3>
+                        <p>{`Leilão: ${dataObj.auction_id}`}</p>
+                        <p>{`Valor: ${dataObj.amount}`}</p>
+                        <p>{`Link: ${dataObj.payment_link}`}</p>
+                      </li>
+                    )
+                }
+                
+                if(notification.EventType == 'leilao_vencedor'){
+                  return (
+                      <li key={index} className="notification-item">
+                        <h3>{"Vencedor de Leilão"}</h3>
+                        <p>{`Leilão: ${dataObj.auction_id}`}</p>
+                        <p>{`Cliente: ${dataObj.client_id}`}</p>
+                        <p>{`Valor: ${dataObj.value}`}</p>
+                      </li>
+                    )
+                }
+
+                if(notification.EventType == 'lance_validado'){
+                  return (
+                      <li key={index} className="notification-item">
+                        <h3>{"Lance Validado"}</h3>
+                        <p>{`Leilão: ${dataObj.auction_id}`}</p>
+                        <p>{`Cliente: ${dataObj.client_id}`}</p>
+                        <p>{`Valor: ${dataObj.value}`}</p>
+                      </li>
+                    )
+                }
+                return (
+                  <li key={index} className="notification-item">
+                      <p>{notification.Data}</p>
+                  </li>
+                )
+              })
           )}
         </ul>
       </aside>
