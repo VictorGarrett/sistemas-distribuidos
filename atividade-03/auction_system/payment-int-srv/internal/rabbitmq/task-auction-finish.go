@@ -33,14 +33,20 @@ func NewTaskAuctionFinish(
 		return nil, err
 	}
 
-	amqpChannel.QueueDeclare(
+	_, err = amqpChannel.QueueDeclare(
 		"leilao_vencedor",
-		true,
+		false,
 		false,
 		false,
 		false,
 		nil,
 	)
+
+	if err != nil {
+		fmt.Printf("Failed to declare queue leilao_vencedor %v", err)
+		return nil, err
+	}
+
 	fmt.Println("Queue leilao_vencedor declared")
 	task := TaskAuctionFinish{
 		pm:           paymentManager,
@@ -51,16 +57,14 @@ func NewTaskAuctionFinish(
 	return &task, nil
 }
 
-func (taf *TaskAuctionFinish) Run(conn *amqp.Connection) error {
+func (taf *TaskAuctionFinish) Run() error {
 	fmt.Println("Running TaskAuctionFinish")
 
-	amqpChannel, err := conn.Channel()
-	if err != nil {
-		fmt.Printf("Failed to create AMQP channel %v", err)
-		return err
-	}
+	defer func() {
+		fmt.Printf("O I am slain")
+	}()
 
-	messages, err := amqpChannel.Consume(
+	messages, err := taf.rmqChannel.Consume(
 		"leilao_vencedor",
 		"",
 		true,
@@ -78,7 +82,13 @@ func (taf *TaskAuctionFinish) Run(conn *amqp.Connection) error {
 	for msg := range messages {
 		fmt.Printf("Received message: %s\n", string(msg.Body))
 		var auctionWinner models.NewAuctionWinner
-		json.Unmarshal(msg.Body, &auctionWinner)
+		err := json.Unmarshal(msg.Body, &auctionWinner)
+
+		if err != nil {
+			fmt.Printf("Error unmarshalling message for won auction: %v", err)
+			fmt.Printf("Raw message body: %s", msg.Body)
+			continue
+		}
 
 		res := taf.sendNewTransaction(&auctionWinner)
 		transactionID, _ := uuid.Parse(res.ID)

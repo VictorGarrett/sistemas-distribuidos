@@ -66,9 +66,9 @@ func main() {
 		log.Fatalf("Failed to Create TaskPaymentLink: %v", err)
 	}
 
-	go taskAuctionFinish.Run(conn)
-	go taskPaymentStatus.Run(conn)
-	go taskPaymentLink.Run(conn)
+	go taskAuctionFinish.Run()
+	go taskPaymentStatus.Run()
+	go taskPaymentLink.Run()
 
 	app := fiber.New()
 	app.Put("/api/update-payment/:payment-id", api.UpdatePayment(paymentManager))
