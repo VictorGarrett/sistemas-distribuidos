@@ -33,30 +33,21 @@ func NewTaskAuctionFinish(
 		return nil, err
 	}
 
-	_, err = amqpChannel.QueueDeclare(
-		"leilao_vencedor",
-		false,
-		false,
-		false,
-		false,
-		nil,
-	)
-
-	_, err = amqpChannel.ExchangeDeclare(
-		"leilao_vencedor",
-		false,
-		true,
-		false,
-		true,
-		nil
+	err = amqpChannel.ExchangeDeclare(
+		"leilao_vencedor", // name
+		"fanout",          // type
+		false,             // durable
+		false,             // auto-deleted
+		false,             // internal
+		false,             // no-wait
+		nil,               // arguments
 	)
 
 	if err != nil {
-		fmt.Printf("Failed to declare queue leilao_vencedor %v", err)
 		return nil, err
 	}
 
-	fmt.Println("Queue leilao_vencedor declared")
+	fmt.Println("Declared leilao_vencedor exchange")
 	task := TaskAuctionFinish{
 		pm:           paymentManager,
 		rmqChannel:   amqpChannel,
