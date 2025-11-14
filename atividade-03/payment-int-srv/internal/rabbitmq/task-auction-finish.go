@@ -42,6 +42,15 @@ func NewTaskAuctionFinish(
 		nil,
 	)
 
+	_, err = amqpChannel.ExchangeDeclare(
+		"leilao_vencedor",
+		false,
+		true,
+		false,
+		true,
+		nil
+	)
+
 	if err != nil {
 		fmt.Printf("Failed to declare queue leilao_vencedor %v", err)
 		return nil, err
