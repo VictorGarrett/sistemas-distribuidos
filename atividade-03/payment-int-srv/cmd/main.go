@@ -4,7 +4,6 @@ import (
 	"flag"
 	"log"
 	"os"
-	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
@@ -17,25 +16,30 @@ import (
 )
 
 func main() {
-	port := flag.Int("port", 8082, "HTTP server port")
-
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Panicf("Failed to load environment file!")
-	}
+	dockerized:= flag.Bool("docker", false, "Specifies if it's running as a docker container")
 	flag.Parse()
+	
+	if !*dockerized{
+		log.Println("Running outside a docker container")
+		err := godotenv.Load(".env")
+		if err != nil {
+			log.Panicf("Failed to load environment file!")
+		}
+	}
 	baseURL := os.Getenv("BASE_URL")
+	port := os.Getenv("PORT")
+	rmqURL := os.Getenv("RMQ_URL")
 
 	updatesChannel := make(chan models.PaymentUpdate)
 	linksChannel := make(chan models.PaymentLink)
 
-	conn, err := amqp.Dial("amqp://guest:guest@127.0.0.1:5672/%2f")
+	conn, err := amqp.Dial(rmqURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to rabbitmq: %v", err)
 	}
 
 	paymentManager := internal.NewPaymentManager(
-		"http://"+baseURL+":"+strconv.Itoa(*port),
+		"http://"+baseURL+":"+ port,
 		updatesChannel,
 	)
 
@@ -73,6 +77,6 @@ func main() {
 	app := fiber.New()
 	app.Post("/api/update-payment", api.UpdatePayment(paymentManager))
 
-	log.Printf("App initiated on %s:%d", baseURL, *port)
-	app.Listen(baseURL + ":" + strconv.Itoa(*port))
+	log.Printf("App initiated on %s:%d", baseURL, port)
+	app.Listen(baseURL + ":" + port)
 }
