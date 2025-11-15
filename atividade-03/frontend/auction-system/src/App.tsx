@@ -26,7 +26,7 @@ interface NotificationItem {
   Data: string;
 }
 
-const API_BASE_URL = 'http://localhost:8090';
+const API_BASE_URL = 'http://localhost:8080';
 const AUDIO_PATH = "https://www.myinstants.com/media/sounds/whatsapp.mp3";
 const USER_ID = Math.floor(Math.random() * 5000);
 

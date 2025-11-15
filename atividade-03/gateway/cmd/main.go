@@ -43,7 +43,8 @@ func main() {
 			log.Panicf("Failed to load environment file!")
 		}
 	}
-	port := getEnv("PORT", "9090")
+	baseURL := getEnv("BASE_URL", "localhost")
+	port := getEnv("PORT", "8080")
 
 	auctionServiceURL := getEnv("AUCTION_SERVICE_URL", "http://localhost:8080")
 	bidServiceURL := getEnv("BID_SERVICE_URL", "http://localhost:8081")
@@ -75,13 +76,13 @@ func main() {
 	mux.HandleFunc("/api/v1/unsubscribe", sseHandler.HandleUnsubscribe)
 
 	server := &http.Server{
-		Addr:    ":" + port,
+		Addr:    baseURL + ":" + port,
 		Handler: withCORS(mux),
 	}
 
 	// Graceful shutdown
 	go func() {
-		log.Printf("Server started on port %s", port)
+		log.Printf("Server started on %s", baseURL+":"+port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
