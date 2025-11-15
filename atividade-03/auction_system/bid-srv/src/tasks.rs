@@ -106,7 +106,7 @@ pub async fn task_validate_bid(
         .with_state(app_state);
 
     let rest_url = env::var("BASE_URL").unwrap_or("127.0.0.1".to_string());
-    let rest_port = env::var("PORT").unwrap_or("8081".to_string());
+    let rest_port = env::var("PORT").unwrap_or("8110".to_string());
     let rest_addr = rest_url + ":" + rest_port.as_str();
     let addr: std::net::SocketAddr = rest_addr.as_str().parse().unwrap();
     println!("REST API listening on {}", addr);

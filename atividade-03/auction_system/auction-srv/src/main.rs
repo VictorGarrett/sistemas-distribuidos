@@ -96,7 +96,7 @@ fn init_tasks(
     ));
     
     let rest_url = env::var("BASE_URL").unwrap_or("127.0.0.1".to_string());
-    let rest_port = env::var("PORT").unwrap_or("8080".to_string());
+    let rest_port = env::var("PORT").unwrap_or("8090".to_string());
     let rest_addr: String = rest_url + ":" + rest_port.as_ref();
     handles.push(tokio::spawn(
         task_rest_api(
