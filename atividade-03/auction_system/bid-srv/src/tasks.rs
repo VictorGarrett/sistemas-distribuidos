@@ -23,7 +23,7 @@ use axum::{
 use sha2::{Digest, Sha256};
 use base64::engine::general_purpose;
 use base64::Engine;
-use std::{fs, path::Path};
+use std::{fs, env ,path::Path};
 use serde_json;
 
 use shared::models::{
@@ -91,8 +91,8 @@ pub async fn task_validate_bid(
     conn: Arc<Connection>,
 ) {
 
-
-    let public_keys = load_public_keys_vec("bid-srv/keys").unwrap();
+    let keys_path = env::var("KEYS_PATH").unwrap_or("bid-srv/keys".to_string());
+    let public_keys = load_public_keys_vec(keys_path.as_str()).unwrap();
 
     let app_state = Arc::new(AppState {
         auctions: auctions,
@@ -105,7 +105,10 @@ pub async fn task_validate_bid(
         .route("/bid", post(make_bid_handler))
         .with_state(app_state);
 
-    let addr: std::net::SocketAddr = "127.0.0.1:8081".parse().unwrap();
+    let rest_url = env::var("BASE_URL").unwrap_or("127.0.0.1".to_string());
+    let rest_port = env::var("PORT").unwrap_or("8081".to_string());
+    let rest_addr = rest_url + ":" + rest_port.as_str();
+    let addr: std::net::SocketAddr = rest_addr.as_str().parse().unwrap();
     println!("REST API listening on {}", addr);
 
     // 1. Bind a tokio::net::TcpListener
