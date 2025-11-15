@@ -6,6 +6,7 @@ use tokio::task::{JoinHandle};
 use std::{error::Error, time::{SystemTime, UNIX_EPOCH}};
 use tokio::sync::mpsc;
 use std::sync::Arc;
+use std::env;
 
 use crate::{tasks::{task_rest_api, task_cron, task_publish_auction_finish, task_publish_auction_start}};
 
@@ -19,8 +20,8 @@ pub mod tasks;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "amqp://guest:guest@127.0.0.1:5672/%2f";
-    let conn = Arc::new(Connection::connect(addr, ConnectionProperties::default()).await?);
+    let addr = env::var("RMQ_URL").unwrap_or("amqp://guest:guest@127.0.0.1:5672/%2f".to_string());
+    let conn = Arc::new(Connection::connect(addr.as_str(), ConnectionProperties::default()).await?);
 
 
     init_rabbitmq_structs(conn.clone()).await?;
@@ -93,13 +94,16 @@ fn init_tasks(
             finished_auction_tx
         )
     ));
-
+    
+    let rest_url = env::var("BASE_URL").unwrap_or("127.0.0.1".to_string());
+    let rest_port = env::var("PORT").unwrap_or("8080".to_string());
+    let rest_addr: String = rest_url + ":" + rest_port.as_ref();
     handles.push(tokio::spawn(
         task_rest_api(
             new_auction_tx,
-            
             Arc::clone(&live_auctions),
-            Arc::clone(&started_auctions)
+            Arc::clone(&started_auctions),
+            rest_addr,
         )
     ));
 
