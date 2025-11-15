@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"gateway/internal/handlers"
 	"log"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 
 	//"gateway/internal/rabbitmq"
 	"gateway/internal/services"
+
+	"github.com/joho/godotenv"
 )
 
 func withCORS(next http.Handler) http.Handler {
@@ -31,9 +34,17 @@ func withCORS(next http.Handler) http.Handler {
 }
 
 func main() {
-	// Configuration (can be overridden with environment variables)
+	dockerize := flag.Bool("docker", false, "Use if running the program in a docker container")
+	flag.Parse()
+
+	if !*dockerize {
+		err := godotenv.Load(".env")
+		if err != nil {
+			log.Panicf("Failed to load environment file!")
+		}
+	}
 	port := getEnv("PORT", "9090")
-	//rabbitURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+
 	auctionServiceURL := getEnv("AUCTION_SERVICE_URL", "http://localhost:8080")
 	bidServiceURL := getEnv("BID_SERVICE_URL", "http://localhost:8081")
 

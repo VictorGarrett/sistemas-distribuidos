@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 )
 
 type Client struct {
@@ -67,8 +68,8 @@ func NewSseBroker() *SseBroker {
 
 // run is the broker's main event loop.
 func (b *SseBroker) run() {
-
-	eventChannel, err := rabbitmq.Consume("amqp://guest:guest@localhost:5672/")
+	rmqURL := os.Getenv("RMQ_URL")
+	eventChannel, err := rabbitmq.Consume(rmqURL)
 	if err != nil {
 		log.Fatalf("Failed to start RabbitMQ consumer: %v", err)
 	}
