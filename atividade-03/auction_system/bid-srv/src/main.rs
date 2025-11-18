@@ -4,6 +4,7 @@ use lapin::{
 
 
 use std::sync::Arc;
+use std::env;
 use tokio::{sync::Mutex, task::JoinHandle};
 use lapin::options::{QueueDeclareOptions, QueueBindOptions, ExchangeDeclareOptions};
 use lapin::types::FieldTable;
@@ -26,8 +27,9 @@ use crate::tasks::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "amqp://guest:guest@127.0.0.1:5672/%2f";
-    let conn = Connection::connect(addr, ConnectionProperties::default()).await?;
+    let rbmq_addr = env::var("RMQ_URL").unwrap_or("amqp://guest:guest@127.0.0.1:5672/%2f".to_string());
+    
+    let conn = Connection::connect(rbmq_addr.as_ref(), ConnectionProperties::default()).await?;
     println!("Consumer connected to RabbitMQ!");
     let conn = Arc::new(conn);
 

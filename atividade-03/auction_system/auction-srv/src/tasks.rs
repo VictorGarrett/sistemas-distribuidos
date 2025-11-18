@@ -34,6 +34,7 @@ pub async fn task_rest_api(
     new_auction_tx: Sender<Auction>,
     live_auctions: Arc<Mutex<Vec<Auction>>>,
     started_auctions: Arc<Mutex<Vec<Auction>>>,
+    rest_addr: String,
 ) {
     let app_state = Arc::new(AppState {
         new_auction_tx,
@@ -46,7 +47,7 @@ pub async fn task_rest_api(
         .route("/auctions", post(create_auction).get(list_auctions))
         .with_state(app_state);
 
-    let addr: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    let addr: std::net::SocketAddr = rest_addr.as_str().parse().unwrap(); 
     println!("REST API listening on {}", addr);
 
     // 1. Bind a tokio::net::TcpListener
@@ -62,12 +63,8 @@ async fn create_auction(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateAuctionRequest>,
 ) -> Result<Json<Auction>, axum::http::StatusCode> {
-    let started_auctions = state.started_auctions.lock().await;
-    let live_auctions = state.live_auctions.lock().await;
     let mut counter = state.auction_counter.lock().await;
 
-
-    
     let auction = Auction::new(
         (*counter) as u32, 
         req.item_name, 

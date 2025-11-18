@@ -1,0 +1,31 @@
+# Use the official Golang image as the base
+FROM rust:1.91-alpine AS builder
+
+# Install necessary build tools and dependencies for Alpine
+RUN apk add --no-cache musl-dev gcc
+
+WORKDIR /build
+
+# Copy Cargo.toml and Cargo.lock first to leverage Docker cache for dependencies
+COPY . .
+
+# Build the final release binary
+RUN cargo build --release -p bid-srv
+
+# Stage 2: Runner
+FROM alpine:latest AS final
+
+WORKDIR /home
+
+# Install any runtime dependencies if required (e.g., if your Rust app uses dynamic libraries)
+# For a fully static Rust binary, this might not be needed.
+# RUN apk add --no-cache libssl1.1 # Example for a common dependency
+
+# Copy the compiled binary from the builder stage
+RUN mkdir bin
+COPY --from=builder /build/target/release/bid-srv ./bin/bid-srv
+COPY --from=builder /build/bid-srv/keys ./keys
+
+# Define the command to run your application
+CMD ["./bin/bid-srv"]
+#CMD ["sleep", "infinity"]
