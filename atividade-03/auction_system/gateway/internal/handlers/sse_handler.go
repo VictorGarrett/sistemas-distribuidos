@@ -258,7 +258,7 @@ func (h *SseHandler) HandleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	var requestData struct {
-		ClientID int   `json:"clientID"`
+		ClientID int   `json:"client_id"`
 		Auctions []int `json:"auctions"`
 	}
 
