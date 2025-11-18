@@ -64,6 +64,10 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      auction-srv:
+        condition: service_started
+      bid-srv:
+        condition: service_started
     networks:
       - app-network
 
@@ -81,6 +85,8 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      bid-srv:
+        condition: service_started
     networks:
       - app-network
 

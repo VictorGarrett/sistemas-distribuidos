@@ -223,6 +223,16 @@ const AuctionSystem: React.FC = () => {
                       </li>
                     )
                 }
+                if(notification.EventType == 'lance_invalidado'){
+                  return (
+                      <li key={index} className="notification-item">
+                        <h3>{"Lance Invalidado"}</h3>
+                        <p>{`Leilão: ${dataObj.auction_id}`}</p>
+                        <p>{`Cliente: ${dataObj.client_id}`}</p>
+                        <p>{`Valor: ${dataObj.value}`}</p>
+                      </li>
+                    )
+                }
                 return (
                   <li key={index} className="notification-item">
                       <p>{notification.Data}</p>

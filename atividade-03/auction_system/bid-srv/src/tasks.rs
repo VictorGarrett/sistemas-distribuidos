@@ -345,7 +345,8 @@ async fn is_bid_valid(
     let auction_opt = auctions.iter().find(|a| a.id == bid.auction_id && a.status);
 
     if auction_opt.is_none() {
-        println!("Auction not found or inactive, bid invalid");
+        println!("Auction not found or inactive, bid invalid {:?}", auctions);
+
         return false;
     }
 
