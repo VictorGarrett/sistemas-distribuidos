@@ -150,8 +150,8 @@ const AuctionSystem: React.FC = () => {
 
     axios.post(`${API_BASE_URL}/api/v1/auctions`, {
       item_name: newAuction.produto,
-      start_timestamp: new Date(newAuction.inicioLeilao).getMilliseconds() || Date.now(),
-      end_timestamp: new Date(newAuction.fimLeilao).getMilliseconds() || Date.now() + 5 * 60 * 1000,
+      start_timestamp: new Date(newAuction.inicioLeilao).getTime(),
+      end_timestamp: new Date(newAuction.fimLeilao).getTime(),
     });
 
     clearForm();

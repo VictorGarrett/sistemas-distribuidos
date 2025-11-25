@@ -42,7 +42,7 @@ func (pm *TransactionManager) CreateNewTransaction(req *models.NewTransactionReq
 	pm.pendingTransactions[payment.ID] = payment
 	pm.mutex.Unlock()
 
-	return payment.ToNewTransactionResponse(pm.BaseUrl + "/pay/" + payment.ID.String())
+	return payment.ToNewTransactionResponse("http://localhost:8100" + "/pay/" + payment.ID.String())
 }
 
 func (pm *TransactionManager) SetPaid(id uuid.UUID) error {

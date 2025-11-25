@@ -19,6 +19,7 @@ type Payment struct {
 
 func HandleNewTransaction(pm *internal.TransactionManager) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		fmt.Println("Received new transaction request")
 		var newTransaction models.NewTransactionRequest
 		if err := c.BodyParser(&newTransaction); err != nil {
 			fmt.Printf("Failed to parse request body to newTransactionRequest type: %v\n", err)
@@ -30,6 +31,8 @@ func HandleNewTransaction(pm *internal.TransactionManager) fiber.Handler {
 		}
 
 		res := pm.CreateNewTransaction(&newTransaction)
+
+		fmt.Println(res)
 
 		return c.Status(fiber.StatusCreated).JSON(res)
 	}

@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
+	"os"
 	"payment-srv/internal"
 	"payment-srv/internal/models"
 
@@ -130,13 +133,17 @@ func (taf *TaskAuctionFinish) Run() error {
 func (taf *TaskAuctionFinish) sendNewTransaction(auctionWinner *models.NewAuctionWinner) *models.NewTransactionResponse {
 	transactionReq := &models.NewTransactionRequest{
 		Amount:   auctionWinner.Amount,
-		Callback: taf.pm.Url + "/api/update-payment",
+		Callback: "http://payment-int-srv:8000/api/update-payment",
 	}
 
 	body, _ := json.Marshal(transactionReq)
+	paymentSrvURL := os.Getenv("PAYMENT_EXT_SRV_URL")
+	if paymentSrvURL == "" {
+		paymentSrvURL = "http://localhost:8100"
+	}
 
 	res, err := http.Post(
-		"http://localhost:7070/transaction",
+		paymentSrvURL+"/transaction",
 		"application/json",
 		bytes.NewBuffer(body),
 	)
@@ -147,10 +154,15 @@ func (taf *TaskAuctionFinish) sendNewTransaction(auctionWinner *models.NewAuctio
 	}
 
 	defer res.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(res.Body)
+	bodyStr := string(bodyBytes)
+	log.Println(bodyStr)
+
 	var transactionResponse models.NewTransactionResponse
-	err = json.NewDecoder(res.Body).Decode(&transactionResponse)
+	err = json.Unmarshal(bodyBytes, &transactionResponse)
 	if err != nil {
-		fmt.Println("Some Error yadayada")
+		fmt.Printf("\nError parsing new transaction response: %v", err)
 		return nil
 	}
 	fmt.Printf("Received response: %+v\n", transactionResponse)
