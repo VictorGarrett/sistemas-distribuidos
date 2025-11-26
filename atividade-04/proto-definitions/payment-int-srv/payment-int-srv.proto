@@ -3,7 +3,7 @@ syntax = "proto3"
 package payment-int-srv;
 
 message UpdatePaymentRequest {
-    string payment_id;
+    string payment_id = 1;
 }
 
 message UpdatePaymentResponse {}
