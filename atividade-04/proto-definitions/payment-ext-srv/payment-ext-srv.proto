@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package paymentExternalSrv;
+
+message CreateTransactionRequest {
+    float amount = 1;
+    string callback = 2;
+}
+
+message CreateTransactionResponse {
+    string transaction_id = 1;
+    float amount = 2;
+    string payment_link = 3;
+}
+
+message Transaction {
+    string id = 1;
+    float amount = 2;
+    int64 created_at = 3;
+    int64 paid_at = 4;
+    string callbacl = 5;
+    string status = 6;
+}
+
+message GetTransactionsRequest {}
+
+message GetTransactionsResponse {
+    repeated Transaction transactions = 1;
+}
+
+message PayTransactionRequest {
+    string transaction_id = 1;
+}
+
+message PayTransactionResponse {
+    int32 status = 1;
+}
+
+service PaymentExternalService {
+    rpc CreateTransaction(CreateTransactionRequest) returns (CreateTransactionResponse);
+    rpc GetTransactions(GetTransactionsRequest) returns (GetTransactionsResponse);
+    rpc PayTransaction(PayTransactionRequest) returns (PayTransactionResponse);
+}
