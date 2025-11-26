@@ -1,0 +1,28 @@
+syntax = "proto3"
+
+package auction-srv
+
+message CreateAuctionRequest {
+    string item_name = 1;
+    uint64 start_timestamp = 2;
+    uint64 end_timestamp = 3;    
+}
+
+message Auction {
+    uint32 id = 1;
+    string item = 2;
+    uint64 start_timestamp = 3;
+    uint64 end_timestamp = 4;
+    bool status = 5;
+}
+
+message GetActiveAuctionsRequest {}
+
+message GetActiveAuctionsResponse {
+  repeated Auction auctions = 1;
+}
+
+service AuctionService {
+  rpc CreateAuction(CreateAuctionRequest) returns Auction;
+  rpc GetActiveAuctions(GetActiveAuctionsRequest) returns GetActiveAuctionsResponse;
+}
