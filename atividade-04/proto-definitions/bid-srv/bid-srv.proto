@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package bid-srv;
+
+message CreateBidRequest {
+    uint32 auction_id = 1;
+    uint32 client_id = 2;
+    double value = 3;
+    string signature = 4;
+    string public_key = 5;
+    bool valid = 6;
+}
+
+message CreateBidResponse {}
+
+service BidService {
+    rpc CreateBid(CreateBidRequest) returns CreateBidResponse;
+}
+
