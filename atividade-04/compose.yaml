@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"    # AMQP port
+      - "15672:15672"  # Management UI
+    # environment:
+    #   RABBITMQ_DEFAULT_USER: guest
+    #   RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  payment-int-srv:
+    build: ./payment-int-srv
+    container_name: payment-int-srv 
+    ports:
+      - "8000:8000"
+    environment:
+      BASE_URL: 0.0.0.0
+      PORT: 8000
+      RMQ_URL: amqp://guest:guest@rabbitmq:5672/%2f
+      PAYMENT_EXT_SRV_URL: http://payment-ext-srv:8000
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  payment-ext-srv:
+    build: ./payment-ext-srv
+    container_name: payment-ext-srv 
+    ports:
+      - "8100:8000"
+    environment:
+      BASE_URL: 0.0.0.0
+      PORT: 8000
+      RMQ_URL: amqp://guest:guest@rabbitmq:5672/%2f
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  gateway:
+    build: ./gateway
+    container_name: gateway 
+    ports:
+      - "8080:8000"
+    environment:
+      BASE_URL: 0.0.0.0
+      PORT: 8000
+      RMQ_URL: amqp://guest:guest@rabbitmq:5672/%2f
+      BID_SERVICE_URL: http://bid-srv:8000
+      AUCTION_SERVICE_URL: http://auction-srv:8000
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      auction-srv:
+        condition: service_started
+      bid-srv:
+        condition: service_started
+    networks:
+      - app-network
+
+  auction-srv:
+    build:
+      context: ./auction_system
+      dockerfile: Dockerfile.auction-srv
+    container_name: auction-srv
+    ports:
+      - "8090:8000"
+    environment:
+      BASE_URL: 0.0.0.0
+      PORT: 8000
+      RMQ_URL: amqp://guest:guest@rabbitmq:5672/%2f
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      bid-srv:
+        condition: service_started
+    networks:
+      - app-network
+
+  bid-srv:
+    build:
+      context: ./auction_system
+      dockerfile: Dockerfile.bid-srv
+    container_name: bid-srv
+    ports:
+      - "8110:8000"
+    environment:
+      BASE_URL: 0.0.0.0
+      PORT: 8000
+      RMQ_URL: amqp://guest:guest@rabbitmq:5672/%2f
+      KEYS_PATH: /home/keys
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app-network
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  app-network:
+    driver: bridge
