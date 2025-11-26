@@ -1,0 +1,13 @@
+syntax = "proto3"
+
+package payment-int-srv;
+
+message UpdatePaymentRequest {
+    string payment_id;
+}
+
+message UpdatePaymentResponse {}
+
+service PaymentInternalService {
+    rpc UpdatePayment(UpdatePaymentRequest) returns UpdatePaymentResponse
+}
