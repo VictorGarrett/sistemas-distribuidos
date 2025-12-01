@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package paymentExternalSrv;
+package payment_external_srv;
 
 message CreateTransactionRequest {
     float amount = 1;

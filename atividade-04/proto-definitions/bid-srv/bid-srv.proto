@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package bid-srv;
+package bid_srv;
 
 message CreateBidRequest {
     uint32 auction_id = 1;

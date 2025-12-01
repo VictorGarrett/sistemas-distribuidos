@@ -1,6 +1,6 @@
 syntax = "proto3"
 
-package payment-int-srv;
+package payment_int_srv;
 
 message UpdatePaymentRequest {
     string payment_id = 1;
