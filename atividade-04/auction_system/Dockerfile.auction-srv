@@ -1,13 +1,17 @@
 # Use the official Golang image as the base
 FROM rust:1.91-alpine AS builder
 
+RUN apk add --no-cache protobuf protobuf-dev
+
 # Install necessary build tools and dependencies for Alpine
 RUN apk add --no-cache musl-dev gcc
+
+COPY proto-definitions /proto-definitions
 
 WORKDIR /build
 
 # Copy Cargo.toml and Cargo.lock first to leverage Docker cache for dependencies
-COPY . .
+COPY ./auction_system .
 
 # Build the final release binary
 RUN cargo build --release -p auction-srv

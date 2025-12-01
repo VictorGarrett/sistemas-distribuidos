@@ -94,12 +94,17 @@ fn init_tasks(
             finished_auction_tx
         )
     ));
+
+    
     
     let rest_url = env::var("BASE_URL").unwrap_or("127.0.0.1".to_string());
     let rest_port = env::var("PORT").unwrap_or("8090".to_string());
     let rest_addr: String = rest_url + ":" + rest_port.as_ref();
     handles.push(tokio::spawn(
-        task_grpc_server()
+        task_grpc_server(
+            Arc::clone(&live_auctions),
+            new_auction_tx
+        )
     ));
 
     handles

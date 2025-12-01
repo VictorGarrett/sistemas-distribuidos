@@ -23,6 +23,6 @@ message GetActiveAuctionsResponse {
 }
 
 service AuctionService {
-  rpc CreateAuction(CreateAuctionRequest) returns Auction;
-  rpc GetActiveAuctions(GetActiveAuctionsRequest) returns GetActiveAuctionsResponse;
+  rpc CreateAuction(CreateAuctionRequest) returns (Auction);
+  rpc GetActiveAuctions(GetActiveAuctionsRequest) returns (GetActiveAuctionsResponse);
 }

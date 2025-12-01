@@ -13,6 +13,84 @@ use std::{sync::Arc, time::{Duration, SystemTime}};
 use shared::models::{
     Auction
 };
+use tonic::{transport::Server};
+
+pub mod auction_srv {
+    tonic::include_proto!("auction_srv");
+}
+
+use auction_srv::auction_service_server::{AuctionService, AuctionServiceServer};
+use auction_srv::{
+    Auction as ProtoAuction,
+    CreateAuctionRequest as ProtoCreateAuctionRequest,
+    GetActiveAuctionsRequest,
+    GetActiveAuctionsResponse,
+};
+
+
+
+
+#[derive(Clone)]
+pub struct AuctionServiceImpl {
+    state: AppState,
+}
+
+#[tonic::async_trait]
+impl AuctionService for AuctionServiceImpl {
+
+    async fn create_auction(
+        &self,
+        request: tonic::Request<ProtoCreateAuctionRequest>,
+    ) -> Result<tonic::Response<ProtoAuction>, tonic::Status> {
+
+        let req = request.into_inner();
+
+        let mut counter = self.state.auction_counter.lock().await;
+
+        let auction = Auction::new(
+            (*counter) as u32,
+            req.item_name,
+            req.start_timestamp as u128,
+            req.end_timestamp as u128
+        );
+
+        *counter += 1;
+
+        // Push into scheduler
+        self.state.new_auction_tx
+            .send(auction.clone())
+            .await
+            .map_err(|_| tonic::Status::internal("send failed"))?;
+
+        Ok(tonic::Response::new(ProtoAuction {
+            id: auction.id,
+            item: auction.item,
+            start_timestamp: auction.start_timestamp as u64,
+            end_timestamp: auction.end_timestamp as u64,
+            status: false, // status = false means active/not finished
+        }))
+    }
+
+    async fn get_active_auctions(
+        &self,
+        _request: tonic::Request<GetActiveAuctionsRequest>,
+    ) -> Result<tonic::Response<GetActiveAuctionsResponse>, tonic::Status> {
+
+        let auctions = self.state.started_auctions.lock().await;
+
+        let response = GetActiveAuctionsResponse {
+            auctions: auctions.iter().map(|a| ProtoAuction {
+                id: a.id,
+                item: a.item.clone(),
+                start_timestamp: a.start_timestamp as u64,
+                end_timestamp: a.end_timestamp as u64,
+                status: true, // started = active
+            }).collect()
+        };
+
+        Ok(tonic::Response::new(response))
+    }
+}
 
 #[derive(Deserialize)]
 pub struct CreateAuctionRequest {
@@ -29,9 +107,30 @@ struct AppState {
     auction_counter: Arc<Mutex<u64>>
 }
 
-/// Task that runs the HTTP server and forwards auctions to the scheduler
-pub async fn task_grpc_server() {
+pub async fn task_grpc_server(
+    live_auctions: Arc<Mutex<Vec<Auction>>>,
+    new_auction_tx: Sender<Auction>
+) {
 
+
+    let state = AppState {
+        new_auction_tx,
+        live_auctions: Arc::clone(&live_auctions),
+        started_auctions: Arc::new(Mutex::new(Vec::new())),
+        auction_counter: Arc::new(Mutex::new(1)),
+    };
+
+    let addr = "0.0.0.0:50051".parse().unwrap();
+
+    let service = AuctionServiceImpl { state };
+
+    println!("Starting gRPC server on {}", addr);
+
+    Server::builder()
+        .add_service(AuctionServiceServer::new(service))
+        .serve(addr)
+        .await
+        .unwrap();
 }
 
 async fn create_auction(
@@ -66,6 +165,9 @@ async fn list_auctions(
     let auctions = state.started_auctions.lock().await.clone();
     Ok(Json(auctions))
 }
+
+
+
 
 
 pub async fn task_publish_auction_start(
