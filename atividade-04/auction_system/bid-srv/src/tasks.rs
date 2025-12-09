@@ -13,13 +13,7 @@ use rsa::{
     RsaPublicKey, 
     Pkcs1v15Sign
 };
-use axum::{
-    extract::State,
-    routing::post,
-    Json, Router,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-};
+
 use sha2::{Digest, Sha256};
 use base64::engine::general_purpose;
 use base64::Engine;
@@ -30,6 +24,139 @@ use shared::models::{
     Auction,
     Bid
 };
+
+use tonic::{transport::Server};
+
+pub mod bid_srv {
+    tonic::include_proto!("bid_srv");
+}
+
+use bid_srv::bid_service_server::{BidService, BidServiceServer};
+use bid_srv::{
+    CreateBidResponse as ProtoCreateBidResponse,
+    CreateBidRequest as ProtoCreateBidRequest,
+};
+
+
+#[derive(Clone)]
+pub struct BidServiceImpl {
+    state: AppState,
+}
+
+#[tonic::async_trait]
+impl BidService for BidServiceImpl {
+
+    async fn create_bid(
+        &self,
+        request: tonic::Request<ProtoCreateBidRequest>,
+    ) -> Result<tonic::Response<ProtoCreateBidResponse>, tonic::Status> {
+
+        let req = request.into_inner();
+
+
+        let bid = Bid {
+            auction_id: req.auction_id,
+            client_id: req.client_id,
+            value: req.value,
+            signature: req.signature,
+            public_key: req.public_key,
+            valid: req.valid };
+
+        println!("Received bid via HTTP POST");
+        dbg!(&bid);
+
+        //let public_key = match state.public_keys.get(bid.client_id as usize) {
+        //    Some(Some(key)) => key.clone(),
+        //    _ => {
+        //        println!("Invalid client ID or key not found for: {}", bid.client_id);
+        //        return (StatusCode::BAD_REQUEST, "Invalid client ID or key not found").into_response();
+        //    }
+        //};
+
+        let bypass_key = indoc::indoc! {r#"
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu+eNcaO1k41frKNUhmq/
+        7QY98WiPZPEHVHY3qkiux1uUgIFBhMpOYOCiaJJMxXBhcHXxFoy0qFlCzr21d/yh
+        hFCQLacv7J1svmV5KWn/1G2OE0RmOuk1KggWI1VnBQLGPh+u8bkzMqQ7EjNQcvtb
+        9Y4g0AcjafTP+7RCESmEjHLREKW0a2HMSSX+uyRrUShAHyHygu6mGAiwHdk/bG2o
+        7+Vv+DLFHtQS5sRKF67kafzWc7ngKdxaZjL7fYB55VMuAnFFEk6qX/Erqh5v9FP8
+        ydtBVTiecJyMAeYvtRsG7tpF+X56F0FT2NpoUcW+0XwpTINdVS+rIMwI2X7fy/oB
+        LQIDAQAB
+        -----END PUBLIC KEY-----
+        "#};
+
+        let public_key = match RsaPublicKey::from_public_key_pem(bypass_key) {
+            Ok(key) => key,
+            Err(e) => { // It's also good practice to print the error 'e'
+                println!("Failed to parse hardcoded public key: {}", e);
+                return Ok(tonic::Response::new(ProtoCreateBidResponse {
+                        success: false
+                }))
+            }
+        };
+
+        let bid_is_valid = is_bid_valid(
+            &bid,
+            &self.state.auctions,
+            &self.state.bids,
+            public_key
+        ).await;
+
+
+        if bid_is_valid {
+            // Add to bids vector
+            let mut bids_lock = self.state.bids.lock().await;
+            bids_lock.push(bid.clone());
+            drop(bids_lock); // Release lock
+
+            let channel = match self.state.conn.create_channel().await {
+                Ok(channel) => channel,
+                Err(e) => {
+                    eprintln!("Failed to create RabbitMQ channel: {}", e);
+                    return Ok(tonic::Response::new(ProtoCreateBidResponse {
+                        success: false
+                    }))
+                }
+            };
+
+            if let Err(e) = publish_validated_bid(&channel, &bid).await {
+                eprintln!("Failed to publish validated bid: {}", e);
+                return Ok(tonic::Response::new(ProtoCreateBidResponse {
+                        success: false
+                }))
+            }
+
+            return Ok(tonic::Response::new(ProtoCreateBidResponse {
+                        success: true
+            }))
+        } 
+        println!("Bid was deemed invalid");
+
+        let channel = match self.state.conn.create_channel().await {
+            Ok(channel) => channel,
+            Err(e) => {
+                eprintln!("Failed to create RabbitMQ channel: {}", e);
+                return Ok(tonic::Response::new(ProtoCreateBidResponse {
+                    success: false
+                }))
+            }
+        };
+
+        if let Err(e) = publish_invalidated_bid(&channel, &bid).await{
+            eprintln!("Failed to publish invalidated bid: {}", e);
+            return Ok(tonic::Response::new(ProtoCreateBidResponse {
+                    success: false
+            }))
+        }
+        
+        return Ok(tonic::Response::new(ProtoCreateBidResponse {
+                    success: false
+        }))
+    
+    }
+
+}
+
 
 /*==================================================== TASKS  ====================================================*/
 
@@ -84,7 +211,9 @@ struct AppState {
     public_keys: Vec<Option<RsaPublicKey>>,
 }
 
-pub async fn task_validate_bid(
+
+
+pub async fn task_grpc_server(
     auctions: Arc<Mutex<Vec<Auction>>>,
     bids: Arc<Mutex<Vec<Bid>>>,
     conn: Arc<Connection>,
@@ -93,118 +222,26 @@ pub async fn task_validate_bid(
     let keys_path = env::var("KEYS_PATH").unwrap_or("bid-srv/keys".to_string());
     let public_keys = load_public_keys_vec(keys_path.as_str()).unwrap();
 
-    let app_state = Arc::new(AppState {
+    let state = AppState {
         auctions: auctions,
         bids: bids,
         conn: conn,
         public_keys: public_keys,
-    });
-
-    let app = Router::new()
-        .route("/bid", post(make_bid_handler))
-        .with_state(app_state);
-
-    let rest_url = env::var("BASE_URL").unwrap_or("127.0.0.1".to_string());
-    let rest_port = env::var("PORT").unwrap_or("8110".to_string());
-    let rest_addr = rest_url + ":" + rest_port.as_str();
-    let addr: std::net::SocketAddr = rest_addr.as_str().parse().unwrap();
-    println!("REST API listening on {}", addr);
-
-    // 1. Bind a tokio::net::TcpListener
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-
-    // 2. Use axum::serve to run the server
-    axum::serve(listener, app.into_make_service()) // 'app' is your axum Router
-        .await
-        .unwrap();
-
-    
-
-}
-
-async fn make_bid_handler(
-    State(state): State<Arc<AppState>>, 
-    Json(bid): Json<Bid>,          
-) -> Response {                    
-    
-    println!("Received bid via HTTP POST");
-    dbg!(&bid);
-
-    //let public_key = match state.public_keys.get(bid.client_id as usize) {
-    //    Some(Some(key)) => key.clone(),
-    //    _ => {
-    //        println!("Invalid client ID or key not found for: {}", bid.client_id);
-    //        return (StatusCode::BAD_REQUEST, "Invalid client ID or key not found").into_response();
-    //    }
-    //};
-
-    let bypass_key = indoc::indoc! {r#"
-    -----BEGIN PUBLIC KEY-----
-    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu+eNcaO1k41frKNUhmq/
-    7QY98WiPZPEHVHY3qkiux1uUgIFBhMpOYOCiaJJMxXBhcHXxFoy0qFlCzr21d/yh
-    hFCQLacv7J1svmV5KWn/1G2OE0RmOuk1KggWI1VnBQLGPh+u8bkzMqQ7EjNQcvtb
-    9Y4g0AcjafTP+7RCESmEjHLREKW0a2HMSSX+uyRrUShAHyHygu6mGAiwHdk/bG2o
-    7+Vv+DLFHtQS5sRKF67kafzWc7ngKdxaZjL7fYB55VMuAnFFEk6qX/Erqh5v9FP8
-    ydtBVTiecJyMAeYvtRsG7tpF+X56F0FT2NpoUcW+0XwpTINdVS+rIMwI2X7fy/oB
-    LQIDAQAB
-    -----END PUBLIC KEY-----
-    "#};
-
-    let public_key = match RsaPublicKey::from_public_key_pem(bypass_key) {
-        Ok(key) => key,
-        Err(e) => { // It's also good practice to print the error 'e'
-            println!("Failed to parse hardcoded public key: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Invalid public key").into_response();
-        }
     };
 
-    let bid_is_valid = is_bid_valid(
-        &bid,
-        &state.auctions,
-        &state.bids,
-        public_key
-    ).await;
+    let addr = "0.0.0.0:50051".parse().unwrap();
 
+    let service = BidServiceImpl { state };
 
-    if bid_is_valid {
-        // Add to bids vector
-        let mut bids_lock = state.bids.lock().await;
-        bids_lock.push(bid.clone());
-        drop(bids_lock); // Release lock
+    println!("Starting gRPC server on {}", addr);
 
-        let channel = match state.conn.create_channel().await {
-            Ok(channel) => channel,
-            Err(e) => {
-                eprintln!("Failed to create RabbitMQ channel: {}", e);
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to connect to queue").into_response();
-            }
-        };
-
-        if let Err(e) = publish_validated_bid(&channel, &bid).await {
-            eprintln!("Failed to publish validated bid: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Bid saved, but failed to publish").into_response();
-        }
-
-        (StatusCode::CREATED, "Bid accepted").into_response()
-    } else {
-        println!("Bid was deemed invalid");
-
-        let channel = match state.conn.create_channel().await {
-            Ok(channel) => channel,
-            Err(e) => {
-                eprintln!("Failed to create RabbitMQ channel: {}", e);
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to connect to queue").into_response();
-            }
-        };
-
-        if let Err(e) = publish_invalidated_bid(&channel, &bid).await{
-            eprintln!("Failed to publish invalidated bid: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Bid saved, but failed to publish").into_response();
-        }
-        
-        (StatusCode::BAD_REQUEST, "Bid was deemed invalid (e.g., signature failure)").into_response()
-    }
+    Server::builder()
+        .add_service(BidServiceServer::new(service))
+        .serve(addr)
+        .await
+        .unwrap();
 }
+
 
 pub async fn task_init_auction(
     auctions: Arc<Mutex<Vec<Auction>>>,

@@ -11,9 +11,11 @@ message CreateBidRequest {
     bool valid = 6;
 }
 
-message CreateBidResponse {}
+message CreateBidResponse {
+    bool success = 1;
+}
 
 service BidService {
-    rpc CreateBid(CreateBidRequest) returns CreateBidResponse;
+    rpc CreateBid(CreateBidRequest) returns (CreateBidResponse);
 }
 

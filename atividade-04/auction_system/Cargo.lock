@@ -451,12 +451,15 @@ dependencies = [
  "futures-lite",
  "indoc",
  "lapin",
+ "prost",
  "rsa",
  "serde",
  "serde_json",
  "sha2",
  "shared",
  "tokio",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]

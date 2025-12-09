@@ -20,7 +20,7 @@ pub mod tasks;
 pub mod constants;
 
 use crate::tasks::{
-    task_validate_bid,
+    task_grpc_server,
     task_end_auction,
     task_init_auction
 };
@@ -63,12 +63,6 @@ fn init_tasks(
 ) -> Vec<JoinHandle<()>> {
     let mut handles = Vec::new();
 
-    handles.push(tokio::spawn(task_validate_bid(
-        auctions.clone(),
-        bids.clone(),
-        conn.clone(),
-    )));
-
     handles.push(tokio::spawn(task_end_auction(
         auctions.clone(),
         bids.clone(),
@@ -80,6 +74,14 @@ fn init_tasks(
         conn.clone(),
         fo_queue_name
     )));
+
+    handles.push(tokio::spawn(
+        task_grpc_server(
+            auctions.clone(),
+            bids.clone(),
+            conn.clone(),
+        )
+    ));
 
     handles
 }

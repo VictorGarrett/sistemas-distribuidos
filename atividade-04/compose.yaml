@@ -93,8 +93,8 @@ services:
 
   bid-srv:
     build:
-      context: ./auction_system
-      dockerfile: Dockerfile.bid-srv
+      context: .
+      dockerfile: auction_system/Dockerfile.bid-srv
     container_name: bid-srv
     ports:
       - "8110:8000"
