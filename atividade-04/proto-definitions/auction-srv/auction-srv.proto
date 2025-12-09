@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package auction_srv;
 
+option go_package = "gateway/proto-go/auction_srv";
+
 message CreateAuctionRequest {
     string item_name = 1;
     uint64 start_timestamp = 2;

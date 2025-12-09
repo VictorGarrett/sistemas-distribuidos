@@ -6,17 +6,23 @@ ENV CGO_ENABLED=0 \
     GOOS=linux \
     GOARCH=amd64
 
+
+
+
+COPY proto-definitions /proto-definitions
+COPY proto-go /proto-go
+
 # Set working directory inside the container
 WORKDIR /build
 
 # Copy go.mod and go.sum files for dependency installation
-COPY go.mod go.sum ./
+COPY ./gateway/go.mod ./gateway/go.sum ./
 
 # Download dependencies
 RUN go mod download
 
 # Copy the entire application source
-COPY . .
+COPY ./gateway .
 
 # Build the Go binary
 RUN go build -o /app ./cmd/main.go

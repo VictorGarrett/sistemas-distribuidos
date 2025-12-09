@@ -7,6 +7,14 @@ import (
 	"gateway/internal/services"
 )
 
+
+
+type CreateAuctionPayload struct {
+    ItemName        string `json:"itemName"`
+    StartTimestamp  uint64 `json:"startTimestamp"`
+    EndTimestamp    uint64 `json:"endTimestamp"`
+}
+
 type AuctionHandler struct {
 	service *services.AuctionService
 }
@@ -38,20 +46,44 @@ func (h *AuctionHandler) getActiveAuctions(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *AuctionHandler) createAuction(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read body", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
+    body, err := io.ReadAll(r.Body)
+    if err != nil {
+        http.Error(w, "Failed to read body", http.StatusBadRequest)
+        return
+    }
+    defer r.Body.Close()
 
-	resp, err := h.service.CreateAuction(body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+    // Parse incoming JSON
+    var payload struct {
+        ItemName        string `json:"itemName"`
+        StartTimestamp  uint64 `json:"startTimestamp"`
+        EndTimestamp    uint64 `json:"endTimestamp"`
+    }
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	w.Write(resp)
+    if err := json.Unmarshal(body, &payload); err != nil {
+        http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+        return
+    }
+
+    // Call gRPC service correctly
+    resp, err := h.service.CreateAuction(
+        payload.ItemName,
+        payload.StartTimestamp,
+        payload.EndTimestamp,
+    )
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    // Marshal resp into JSON
+    out, err := json.Marshal(resp)
+    if err != nil {
+        http.Error(w, "Failed to serialize response", http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+    w.Write(out)
 }

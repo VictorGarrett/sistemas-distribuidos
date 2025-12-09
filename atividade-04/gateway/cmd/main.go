@@ -50,7 +50,12 @@ func main() {
 	bidServiceURL := getEnv("BID_SERVICE_URL", "http://localhost:8081")
 
 	// Initialize dependencies
-	auctionSvc := services.NewAuctionService(auctionServiceURL)
+	auctionSvc, err := services.NewAuctionService(auctionServiceURL)
+	if err != nil {
+		log.Panicf("Failed to load grpc services!")
+	}
+
+
 	handler := handlers.NewAuctionHandler(auctionSvc)
 
 	bidSvc := services.NewBidService(bidServiceURL)

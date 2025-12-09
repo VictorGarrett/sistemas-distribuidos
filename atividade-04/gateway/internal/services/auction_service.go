@@ -1,58 +1,77 @@
 package services
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
+    "context"
+    "fmt"
+    "time"
+
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
+
 )
 
+import auction_srv "gateway/proto-go/auction_srv"
+
 type AuctionService struct {
-	baseURL string
-	client  *http.Client
+    client auction_srv.AuctionServiceClient
+    conn   *grpc.ClientConn
 }
 
-func NewAuctionService(baseURL string) *AuctionService {
-	return &AuctionService{
-		baseURL: baseURL,
-		client:  &http.Client{},
-	}
+func NewAuctionService(baseURL string) (*AuctionService, error) {
+    // baseURL should look like "localhost:50051"
+    conn, err := grpc.Dial(
+        baseURL,
+        grpc.WithTransportCredentials(insecure.NewCredentials()), // remove if using TLS
+    )
+    if err != nil {
+        return nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
+    }
+
+    client := auction_srv.NewAuctionServiceClient(conn)
+
+    return &AuctionService{
+        client: client,
+        conn:   conn,
+    }, nil
 }
 
-func (s *AuctionService) GetActiveAuctions() ([]map[string]interface{}, error) {
-	resp, err := s.client.Get(fmt.Sprintf("%s/auctions", s.baseURL))
-	fmt.Printf("GET %s/auctions\n", s.baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get active auctions: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("auction service error: %s", string(body))
-	}
-
-	var auctions []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&auctions); err != nil {
-		return nil, fmt.Errorf("failed to decode auctions: %w", err)
-	}
-	return auctions, nil
+func (s *AuctionService) Close() {
+    if s.conn != nil {
+        s.conn.Close()
+    }
 }
 
-func (s *AuctionService) CreateAuction(payload []byte) ([]byte, error) {
-	resp, err := s.client.Post(fmt.Sprintf("%s/auctions", s.baseURL), "application/json", bytes.NewBuffer(payload))
-	fmt.Printf("POST %s/auctions\n", s.baseURL)
-	fmt.Printf("Request Body: %s\n", string(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create auction: %w", err)
-	}
-	defer resp.Body.Close()
+func (s *AuctionService) GetActiveAuctions() ([]*auction_srv.Auction, error) {
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
 
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("auction service returned %d: %s", resp.StatusCode, string(body))
-	}
+    fmt.Println("gRPC: GetActiveAuctions")
 
-	return body, nil
+    resp, err := s.client.GetActiveAuctions(ctx, &auction_srv.GetActiveAuctionsRequest{})
+    if err != nil {
+        return nil, fmt.Errorf("grpc GetActiveAuctions failed: %w", err)
+    }
+
+    return resp.Auctions, nil
+}
+
+func (s *AuctionService) CreateAuction(itemName string, start, end uint64) (*auction_srv.Auction, error) {
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+
+    req := &auction_srv.CreateAuctionRequest{
+        ItemName:        itemName,
+        StartTimestamp:  start,
+        EndTimestamp:    end,
+    }
+
+    fmt.Println("gRPC: CreateAuction")
+    fmt.Printf("Request: %+v\n", req)
+
+    resp, err := s.client.CreateAuction(ctx, req)
+    if err != nil {
+        return nil, fmt.Errorf("grpc CreateAuction failed: %w", err)
+    }
+
+    return resp, nil
 }
