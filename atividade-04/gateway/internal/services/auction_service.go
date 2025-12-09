@@ -52,12 +52,17 @@ func (s *AuctionService) GetActiveAuctions() ([]*auction_srv.Auction, error) {
         return nil, fmt.Errorf("grpc GetActiveAuctions failed: %w", err)
     }
 
+	fmt.Println("result", resp.Auctions)
+
     return resp.Auctions, nil
 }
 
 func (s *AuctionService) CreateAuction(itemName string, start, end uint64) (*auction_srv.Auction, error) {
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
+
+	fmt.Printf("gRPC sending: item=%s start=%d end=%d\n",
+    itemName, start, end)
 
     req := &auction_srv.CreateAuctionRequest{
         ItemName:        itemName,

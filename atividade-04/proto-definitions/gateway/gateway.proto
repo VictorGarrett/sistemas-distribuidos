@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package gateway;
+
+option go_package = "gateway/proto-go/gateway";
+
+
+message EventRequest {
+    uint32 client_id = 1;
+}
+
+message EventResponse {
+    string event_type = 1;
+    uint32 auction_id = 2;
+    string data = 3;
+}
+
+
+message AuctionSubscribeRequest {
+    uint32 client_id = 1;
+    repeated uint32 auction_id = 2;
+}
+
+message AuctionSubscribeResponse {
+    bool success = 1;
+}
+
+
+message AuctionUnsubscribeRequest {
+    uint32 client_id = 1;
+    repeated uint32 auction_id = 2;
+}
+
+message AuctionUnsubscribeResponse {
+    bool success = 1;
+}
+
+service EventStream {
+    rpc StreamStart(EventRequest) returns (stream EventResponse);
+    rpc AuctionSubscribe(AuctionSubscribeRequest) returns (AuctionSubscribeResponse);
+    rpc AuctionUnsubscribe(AuctionUnsubscribeRequest) returns (AuctionUnsubscribeResponse);
+}
+

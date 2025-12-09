@@ -95,11 +95,16 @@ fn init_tasks(
         )
     ));
 
+    let grpc_url = env::var("BASE_URL").unwrap_or("127.0.0.1".to_string());
+    let grpc_port = env::var("PORT").unwrap_or("8090".to_string());
+    let grpc_addr: String = grpc_url + ":" + grpc_port.as_ref();
     
     handles.push(tokio::spawn(
         task_grpc_server(
             Arc::clone(&live_auctions),
-            new_auction_tx
+            Arc::clone(&started_auctions),
+            new_auction_tx,
+            grpc_addr
         )
     ));
 

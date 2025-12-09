@@ -6,33 +6,59 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
 )
 
+import bid_srv "gateway/proto-go/bid_srv"
+
 type BidService struct {
-	baseURL string
-	client  *http.Client
+	client bid_srv.BidServiceClient
+    conn   *grpc.ClientConn
 }
 
 func NewBidService(baseURL string) *BidService {
+	 conn, err := grpc.Dial(
+        baseURL,
+        grpc.WithTransportCredentials(insecure.NewCredentials()), // remove if using TLS
+    )
+    if err != nil {
+		fmt.Errorf("failed to connect to gRPC server: %w", err)
+		return nil
+    }
+
+    client := bid_srv.NewBidServiceClient(conn)
+	
 	return &BidService{
-		baseURL: baseURL,
-		client:  &http.Client{},
+		client: client,
+        conn:   conn,
 	}
 }
 
-func (s *BidService) CreateBid(payload []byte) ([]byte, error) {
-	resp, err := s.client.Post(fmt.Sprintf("%s/bid", s.baseURL), "application/json", bytes.NewBuffer(payload))
-	fmt.Printf("POST %s/bid\n", s.baseURL)
-	fmt.Printf("Request Body: %s\n", string(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Bid: %w", err)
-	}
-	defer resp.Body.Close()
+func (s *BidService) CreateBid(auction_id uint32, client_id uint32, value float64, signature string, public_key string, valid bool) (*bid_srv.CreateBidResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
 
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Bid service returned %d: %s", resp.StatusCode, string(body))
-	}
+	fmt.Printf("gRPC sending: auction=%s client=%d val=%d\n",
+    auction_id, client_id, value)
 
-	return body, nil
+    req := &bid_srv.CreateBidRequest{
+        AuctionId: auction_id,
+		ClientId = client_id,
+		Value = value,
+		Signature = signature,
+		PublicKey = public_key,
+		Valid = valid
+    }
+
+    fmt.Println("gRPC: CreateBid")
+    fmt.Printf("Request: %+v\n", req)
+
+    resp, err := s.client.CreateBid(ctx, req)
+    if err != nil {
+        return nil, fmt.Errorf("grpc CreateBid failed: %w", err)
+    }
+
+    return resp, nil
 }

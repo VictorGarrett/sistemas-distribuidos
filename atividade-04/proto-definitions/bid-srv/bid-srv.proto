@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package bid_srv;
 
+option go_package = "gateway/proto-go/bid_srv";
+
 message CreateBidRequest {
     uint32 auction_id = 1;
     uint32 client_id = 2;

@@ -55,9 +55,9 @@ func (h *AuctionHandler) createAuction(w http.ResponseWriter, r *http.Request) {
 
     // Parse incoming JSON
     var payload struct {
-        ItemName        string `json:"itemName"`
-        StartTimestamp  uint64 `json:"startTimestamp"`
-        EndTimestamp    uint64 `json:"endTimestamp"`
+        ItemName        string `json:"item_name"`
+        StartTimestamp  uint64 `json:"start_timestamp"`
+        EndTimestamp    uint64 `json:"end_timestamp"`
     }
 
     if err := json.Unmarshal(body, &payload); err != nil {

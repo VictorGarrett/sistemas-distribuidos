@@ -78,6 +78,9 @@ impl AuctionService for AuctionServiceImpl {
 
         let auctions = self.state.started_auctions.lock().await;
 
+        println!("current active auctions {}", auctions.len());
+
+
         let response = GetActiveAuctionsResponse {
             auctions: auctions.iter().map(|a| ProtoAuction {
                 id: a.id,
@@ -85,9 +88,9 @@ impl AuctionService for AuctionServiceImpl {
                 start_timestamp: a.start_timestamp as u64,
                 end_timestamp: a.end_timestamp as u64,
                 status: true, // started = active
-            }).collect()
+            }).collect::<Vec<ProtoAuction>>()
         };
-
+        println!("returning active auctions {}", response.auctions.len());
         Ok(tonic::Response::new(response))
     }
 }
@@ -109,18 +112,19 @@ struct AppState {
 
 pub async fn task_grpc_server(
     live_auctions: Arc<Mutex<Vec<Auction>>>,
-    new_auction_tx: Sender<Auction>
+    started_auctions: Arc<Mutex<Vec<Auction>>>,
+    new_auction_tx: Sender<Auction>,
+    addr: String
 ) {
 
 
     let state = AppState {
         new_auction_tx,
         live_auctions: Arc::clone(&live_auctions),
-        started_auctions: Arc::new(Mutex::new(Vec::new())),
+        started_auctions: Arc::clone(&started_auctions),
         auction_counter: Arc::new(Mutex::new(1)),
     };
 
-    let addr = "0.0.0.0:50051".parse().unwrap();
 
     let service = AuctionServiceImpl { state };
 
@@ -128,7 +132,7 @@ pub async fn task_grpc_server(
 
     Server::builder()
         .add_service(AuctionServiceServer::new(service))
-        .serve(addr)
+        .serve(addr.parse().unwrap())
         .await
         .unwrap();
 }

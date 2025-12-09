@@ -62,8 +62,8 @@ services:
       BASE_URL: 0.0.0.0
       PORT: 8000
       RMQ_URL: amqp://guest:guest@rabbitmq:5672/%2f
-      BID_SERVICE_URL: http://bid-srv:8000
-      AUCTION_SERVICE_URL: http://auction-srv:8000
+      BID_SERVICE_URL: bid-srv:8000
+      AUCTION_SERVICE_URL: auction-srv:8000
     depends_on:
       rabbitmq:
         condition: service_healthy

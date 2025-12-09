@@ -195,7 +195,7 @@ func (*GetActiveAuctionsRequest) Descriptor() ([]byte, []int) {
 
 type GetActiveAuctionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Auctions      []*Auction             `protobuf:"bytes,1,rep,name=auctions,proto3" json:"auctions,omitempty"`
+	Auctions      []*Auction             `protobuf:"bytes,1,rep,name=auctions,proto3" json:"auctions"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

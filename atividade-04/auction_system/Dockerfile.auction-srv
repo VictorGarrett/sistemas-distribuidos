@@ -16,12 +16,15 @@ COPY ./auction_system .
 # Build the final release binary
 RUN cargo build --release -p auction-srv
 
+
+
+
 # Stage 2: Runner
 FROM alpine:latest AS final
 
 # Install any runtime dependencies if required (e.g., if your Rust app uses dynamic libraries)
 # For a fully static Rust binary, this might not be needed.
-# RUN apk add --no-cache libssl1.1 # Example for a common dependency
+#RUN apk add --no-cache libssl1.1 # Example for a common dependency
 
 # Copy the compiled binary from the builder stage
 COPY --from=builder /build/target/release/auction-srv ./bin/auction-srv

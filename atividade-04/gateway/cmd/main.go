@@ -46,8 +46,8 @@ func main() {
 	baseURL := getEnv("BASE_URL", "localhost")
 	port := getEnv("PORT", "8080")
 
-	auctionServiceURL := getEnv("AUCTION_SERVICE_URL", "http://localhost:8080")
-	bidServiceURL := getEnv("BID_SERVICE_URL", "http://localhost:8081")
+	auctionServiceURL := getEnv("AUCTION_SERVICE_URL", "localhost:8080")
+	bidServiceURL := getEnv("BID_SERVICE_URL", "localhost:8081")
 
 	// Initialize dependencies
 	auctionSvc, err := services.NewAuctionService(auctionServiceURL)
@@ -61,9 +61,31 @@ func main() {
 	bidSvc := services.NewBidService(bidServiceURL)
 	bidHandler := handlers.NewBidHandler(bidSvc)
 
-	sseBroker := handlers.NewSseBroker()
-	// 2. Create the SSE handler, giving it the broker.
-	sseHandler := handlers.NewSseHandler(sseBroker)
+	// Create the broker
+    broker := handlers.NewGrpcBroker()
+
+    // Create the gRPC server
+    grpcServer := grpc.NewServer()
+
+    // Create and register the event stream service
+    eventStreamServer := handlers.NewEventStreamServer(broker)
+    pb.RegisterEventStreamServer(grpcServer, eventStreamServer)
+
+    // Register reflection service (useful for tools like grpcurl)
+    reflection.Register(grpcServer)
+
+    // Listen on a port
+    listener, err := net.Listen("tcp", ":"+port)
+    if err != nil {
+        log.Fatalf("Failed to listen: %v", err)
+    }
+
+    log.Println("gRPC server listening on :"+port)
+
+    // Start serving
+    if err := grpcServer.Serve(listener); err != nil {
+        log.Fatalf("Failed to serve: %v", err)
+    }
 
 	// Start RabbitMQ consumer
 	//go func() {
