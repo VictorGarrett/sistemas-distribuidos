@@ -4,34 +4,19 @@ import (
 	"context"
 	"flag"
 	"gateway/internal/handlers"
+	"gateway/internal/services"
+	pb "gateway/proto-go/gateway"
 	"log"
-	"net/http"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	//"gateway/internal/rabbitmq"
-	"gateway/internal/services"
-
 	"github.com/joho/godotenv"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
-
-func withCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*") // or "http://localhost:5173"
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-		// Handle preflight requests
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
 
 func main() {
 	dockerize := flag.Bool("docker", false, "Use if running the program in a docker container")
@@ -43,89 +28,79 @@ func main() {
 			log.Panicf("Failed to load environment file!")
 		}
 	}
-	baseURL := getEnv("BASE_URL", "localhost")
-	port := getEnv("PORT", "8080")
 
+	port := getEnv("PORT", "50051")
 	auctionServiceURL := getEnv("AUCTION_SERVICE_URL", "localhost:8080")
 	bidServiceURL := getEnv("BID_SERVICE_URL", "localhost:8081")
 
-	// Initialize dependencies
+	// Initialize services
 	auctionSvc, err := services.NewAuctionService(auctionServiceURL)
 	if err != nil {
-		log.Panicf("Failed to load grpc services!")
+		log.Panicf("Failed to load auction service: %v", err)
 	}
-
-
-	handler := handlers.NewAuctionHandler(auctionSvc)
 
 	bidSvc := services.NewBidService(bidServiceURL)
+
+	// Create handlers
+	auctionHandler := handlers.NewAuctionHandler(auctionSvc)
 	bidHandler := handlers.NewBidHandler(bidSvc)
 
-	// Create the broker
-    broker := handlers.NewGrpcBroker()
+	// Create the broker for event streaming
+	broker := handlers.NewGrpcBroker()
 
-    // Create the gRPC server
-    grpcServer := grpc.NewServer()
+	// Create the gRPC server
+	grpcServer := grpc.NewServer()
 
-    // Create and register the event stream service
-    eventStreamServer := handlers.NewEventStreamServer(broker)
-    pb.RegisterEventStreamServer(grpcServer, eventStreamServer)
+	// Register all services
+	pb.RegisterAuctionServiceServer(grpcServer, auctionHandler)
+	pb.RegisterBidServiceServer(grpcServer, bidHandler)
 
-    // Register reflection service (useful for tools like grpcurl)
-    reflection.Register(grpcServer)
+	// Create and register the event stream service
+	eventStreamServer := handlers.NewEventStreamServer(broker)
+	pb.RegisterEventStreamServer(grpcServer, eventStreamServer)
 
-    // Listen on a port
-    listener, err := net.Listen("tcp", ":"+port)
-    if err != nil {
-        log.Fatalf("Failed to listen: %v", err)
-    }
+	// Register reflection service (useful for tools like grpcurl and debugging)
+	reflection.Register(grpcServer)
 
-    log.Println("gRPC server listening on :"+port)
-
-    // Start serving
-    if err := grpcServer.Serve(listener); err != nil {
-        log.Fatalf("Failed to serve: %v", err)
-    }
-
-	// Start RabbitMQ consumer
-	//go func() {
-	//	if err := rabbitmq.Consume(rabbitURL, "events"); err != nil {
-	//		log.Printf("RabbitMQ consumer error: %v", err)
-	//	}
-	//}()
-
-	// Setup HTTP server
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/auctions", handler.HandleAuctions)
-	mux.HandleFunc("/api/v1/bid", bidHandler.HandleBids)
-	mux.HandleFunc("/api/v1/events", sseHandler.HandleEvents)
-	mux.HandleFunc("/api/v1/subscribe", sseHandler.HandleSubscribe)
-	mux.HandleFunc("/api/v1/unsubscribe", sseHandler.HandleUnsubscribe)
-
-	server := &http.Server{
-		Addr:    baseURL + ":" + port,
-		Handler: withCORS(mux),
+	// Listen on TCP port
+	listener, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		log.Fatalf("Failed to listen on port %s: %v", port, err)
 	}
 
-	// Graceful shutdown
+	log.Printf("gRPC server starting on :%s", port)
+
+	// Start server in goroutine for graceful shutdown
 	go func() {
-		log.Printf("Server started on %s", baseURL+":"+port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
+		if err := grpcServer.Serve(listener); err != nil {
+			log.Fatalf("Failed to serve: %v", err)
 		}
 	}()
 
+	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	log.Println("Shutting down gRPC server...")
 
+	// Graceful stop with timeout
+	stopped := make(chan struct{})
+	go func() {
+		grpcServer.GracefulStop()
+		close(stopped)
+	}()
+
+	// Force stop after timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+
+	select {
+	case <-stopped:
+		log.Println("gRPC server stopped gracefully")
+	case <-ctx.Done():
+		log.Println("Forcing gRPC server shutdown...")
+		grpcServer.Stop()
 	}
-	log.Println("Server stopped gracefully")
 }
 
 func getEnv(key, fallback string) string {
