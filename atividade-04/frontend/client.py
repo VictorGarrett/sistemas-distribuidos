@@ -261,6 +261,7 @@ def main():
                 if valid is None:
                     continue
                 
+                print(f"auction {auction_id}, client {client_id}, value {value}")
                 client.create_bid(auction_id, client_id, value, signature, public_key, valid)
             
             elif choice == '4':

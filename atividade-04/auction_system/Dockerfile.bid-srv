@@ -28,7 +28,7 @@ FROM alpine:latest AS final
 # Copy the compiled binary from the builder stage
 #RUN mkdir bin
 COPY --from=builder /build/target/release/bid-srv ./bin/bid-srv
-COPY --from=builder /build/bid-srv/keys ./keys
+COPY  ./auction_system/bid-srv/keys /home/keys
 
 # Define the command to run your application
 CMD ["./bin/bid-srv"]

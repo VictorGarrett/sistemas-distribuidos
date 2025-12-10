@@ -21,12 +21,6 @@ func NewBidHandler(svc *services.BidService) *BidHandler {
 
 func (h *BidHandler) CreateBid(ctx context.Context, req *pb.CreateBidRequest) (*pb.CreateBidResponse, error) {
 	// Validate request
-	if req.AuctionId == 0 {
-		return nil, status.Error(codes.InvalidArgument, "auction_id is required")
-	}
-	if req.ClientId == 0 {
-		return nil, status.Error(codes.InvalidArgument, "client_id is required")
-	}
 	if req.Value <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "value must be greater than 0")
 	}

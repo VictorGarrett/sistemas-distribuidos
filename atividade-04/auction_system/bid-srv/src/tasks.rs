@@ -217,6 +217,7 @@ pub async fn task_grpc_server(
     auctions: Arc<Mutex<Vec<Auction>>>,
     bids: Arc<Mutex<Vec<Bid>>>,
     conn: Arc<Connection>,
+    addr: String
 ) {
 
     let keys_path = env::var("KEYS_PATH").unwrap_or("bid-srv/keys".to_string());
@@ -229,7 +230,6 @@ pub async fn task_grpc_server(
         public_keys: public_keys,
     };
 
-    let addr = "0.0.0.0:50051".parse().unwrap();
 
     let service = BidServiceImpl { state };
 
@@ -237,7 +237,7 @@ pub async fn task_grpc_server(
 
     Server::builder()
         .add_service(BidServiceServer::new(service))
-        .serve(addr)
+        .serve(addr.parse().unwrap())
         .await
         .unwrap();
 }

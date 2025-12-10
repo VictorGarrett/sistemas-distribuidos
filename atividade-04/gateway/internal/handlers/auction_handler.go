@@ -69,11 +69,3 @@ func (h *AuctionHandler) CreateAuction(ctx context.Context, req *pb.CreateAuctio
 		Success: true,
 	}, nil
 }
-
-// Helper function to convert bool status to string
-func boolToStatus(active bool) string {
-	if active {
-		return "active"
-	}
-	return "inactive"
-}

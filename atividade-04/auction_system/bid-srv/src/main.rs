@@ -75,11 +75,16 @@ fn init_tasks(
         fo_queue_name
     )));
 
+    let grpc_url = env::var("BASE_URL").unwrap_or("127.0.0.1".to_string());
+    let grpc_port = env::var("PORT").unwrap_or("8090".to_string());
+    let grpc_addr: String = grpc_url + ":" + grpc_port.as_ref();
+
     handles.push(tokio::spawn(
         task_grpc_server(
             auctions.clone(),
             bids.clone(),
             conn.clone(),
+            grpc_addr
         )
     ));
 
