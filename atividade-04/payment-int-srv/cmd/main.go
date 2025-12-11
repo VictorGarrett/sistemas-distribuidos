@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -95,15 +96,8 @@ func main() {
 		log.Fatalf("Failed to listen on %s", baseURL+":"+port)
 	}
 
-	go func() {
-		if err := grpcServer.Serve(socket); err != nil {
-			log.Fatalf("Failed to start grpcServer: %v", err)
-		}
-	}()
-
-	//app := fiber.New()
-	//app.Post("/api/update-payment", api.UpdatePayment(paymentManager))
-
-	//log.Printf("App initiated on %s:%d", baseURL, port)
-	//app.Listen(baseURL + ":" + port)
+	fmt.Println("Starting GRPC Server")
+	if err := grpcServer.Serve(socket); err != nil {
+		log.Fatalf("Failed to start grpcServer: %v", err)
+	}
 }

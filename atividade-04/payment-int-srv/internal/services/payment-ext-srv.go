@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	pes "payment-srv/proto-go/payment-ext-srv"
 
 	"google.golang.org/grpc"
@@ -14,6 +15,7 @@ type PaymentExternalService struct {
 }
 
 func NewPaymentExternalService(url string) (*PaymentExternalService, error) {
+	fmt.Println("Starting Payment external service client")
 	conn, err := grpc.NewClient(
 		url,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
