@@ -13,7 +13,7 @@ type PaymentExternalServiceServer struct {
 	tm *internal.TransactionManager
 }
 
-func NewGRPCService(
+func NewPaymentExternalServiceServer(
 	tm *internal.TransactionManager,
 ) *PaymentExternalServiceServer {
 	return &PaymentExternalServiceServer{

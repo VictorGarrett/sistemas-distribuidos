@@ -41,10 +41,13 @@ services:
     container_name: payment-ext-srv 
     ports:
       - "8100:8000"
+      - "8120:8120"
     environment:
       BASE_URL: 0.0.0.0
-      PORT: 8000
+      GRPC_PORT: 8000
+      REST_PORT: 8120
       RMQ_URL: amqp://guest:guest@rabbitmq:5672/%2f
+      PAYMENT_INT_SRV_URL: http://payment-int-srv:8000
     depends_on:
       rabbitmq:
         condition: service_healthy
