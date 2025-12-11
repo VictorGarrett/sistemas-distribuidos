@@ -1,23 +1,20 @@
 package rabbitmq
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"os"
 	"payment-srv/internal"
 	"payment-srv/internal/models"
+	"payment-srv/internal/services"
 
 	"github.com/google/uuid"
 	"github.com/streadway/amqp"
 )
 
 type TaskAuctionFinish struct {
-	pm         *internal.PaymentManager
-	rmqChannel *amqp.Channel
+	pm                  *internal.PaymentManager
+	rmqChannel          *amqp.Channel
+	paymentExtSrvClient *services.PaymentExternalService
 
 	linksChannel chan models.PaymentLink
 }
@@ -26,6 +23,7 @@ func NewTaskAuctionFinish(
 	paymentManager *internal.PaymentManager,
 	conn *amqp.Connection,
 	linksChannel chan models.PaymentLink,
+	paymentExtSrvClient *services.PaymentExternalService,
 ) (*TaskAuctionFinish, error) {
 
 	fmt.Println("Initializing TaskAuctionFinish")
@@ -52,9 +50,10 @@ func NewTaskAuctionFinish(
 
 	fmt.Println("Declared leilao_vencedor exchange")
 	task := TaskAuctionFinish{
-		pm:           paymentManager,
-		rmqChannel:   amqpChannel,
-		linksChannel: linksChannel,
+		pm:                  paymentManager,
+		rmqChannel:          amqpChannel,
+		linksChannel:        linksChannel,
+		paymentExtSrvClient: paymentExtSrvClient,
 	}
 
 	return &task, nil
@@ -131,40 +130,16 @@ func (taf *TaskAuctionFinish) Run() error {
 }
 
 func (taf *TaskAuctionFinish) sendNewTransaction(auctionWinner *models.NewAuctionWinner) *models.NewTransactionResponse {
-	transactionReq := &models.NewTransactionRequest{
-		Amount:   auctionWinner.Amount,
-		Callback: "http://payment-int-srv:8000/api/update-payment",
-	}
-
-	body, _ := json.Marshal(transactionReq)
-	paymentSrvURL := os.Getenv("PAYMENT_EXT_SRV_URL")
-	if paymentSrvURL == "" {
-		paymentSrvURL = "http://localhost:8100"
-	}
-
-	res, err := http.Post(
-		paymentSrvURL+"/transaction",
-		"application/json",
-		bytes.NewBuffer(body),
-	)
+	res, err := taf.paymentExtSrvClient.CreateTransaction(auctionWinner.Amount)
 
 	if err != nil {
 		fmt.Println("Failed to req from ext payment srv", err)
 		return nil
 	}
 
-	defer res.Body.Close()
-
-	bodyBytes, _ := io.ReadAll(res.Body)
-	bodyStr := string(bodyBytes)
-	log.Println(bodyStr)
-
-	var transactionResponse models.NewTransactionResponse
-	err = json.Unmarshal(bodyBytes, &transactionResponse)
-	if err != nil {
-		fmt.Printf("\nError parsing new transaction response: %v", err)
-		return nil
+	return &models.NewTransactionResponse{
+		ID:     res.TransactionId,
+		Amount: res.Amount,
+		Link:   res.PaymentLink,
 	}
-	fmt.Printf("Received response: %+v\n", transactionResponse)
-	return &transactionResponse
 }

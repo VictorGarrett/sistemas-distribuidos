@@ -3,23 +3,26 @@ package main
 import (
 	"flag"
 	"log"
+	"net"
 	"os"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 	"github.com/streadway/amqp"
+	"google.golang.org/grpc"
 
 	"payment-srv/internal"
 	"payment-srv/internal/api"
 	"payment-srv/internal/models"
 	"payment-srv/internal/rabbitmq"
+	"payment-srv/internal/services"
+	pis "payment-srv/proto-go/payment-int-srv"
 )
 
 func main() {
-	dockerized:= flag.Bool("docker", false, "Specifies if it's running as a docker container")
+	dockerized := flag.Bool("docker", false, "Specifies if it's running as a docker container")
 	flag.Parse()
-	
-	if !*dockerized{
+
+	if !*dockerized {
 		log.Println("Running outside a docker container")
 		err := godotenv.Load(".env")
 		if err != nil {
@@ -29,6 +32,7 @@ func main() {
 	baseURL := os.Getenv("BASE_URL")
 	port := os.Getenv("PORT")
 	rmqURL := os.Getenv("RMQ_URL")
+	paymentExtSrvURL := os.Getenv("PAYMENT_EXT_SRV_URL")
 
 	updatesChannel := make(chan models.PaymentUpdate)
 	linksChannel := make(chan models.PaymentLink)
@@ -39,15 +43,22 @@ func main() {
 	}
 
 	paymentManager := internal.NewPaymentManager(
-		"http://"+baseURL+":"+ port,
+		"http://"+baseURL+":"+port,
 		updatesChannel,
 	)
+
+	paymentExtSrv, err := services.NewPaymentExternalService(paymentExtSrvURL)
+	if err != nil {
+		log.Fatalf("Failed to start Payment External Service Client: %v", err)
+	}
 
 	taskAuctionFinish, err := rabbitmq.NewTaskAuctionFinish(
 		paymentManager,
 		conn,
 		linksChannel,
+		paymentExtSrv,
 	)
+
 	if err != nil {
 		log.Fatalf("Failed to Create TaskAuctionFinish: %v", err)
 	}
@@ -74,9 +85,25 @@ func main() {
 	go taskPaymentStatus.Run()
 	go taskPaymentLink.Run()
 
-	app := fiber.New()
-	app.Post("/api/update-payment", api.UpdatePayment(paymentManager))
+	pisServer := api.NewPaymentInternalServiceServer(paymentManager)
+	grpcServer := grpc.NewServer()
 
-	log.Printf("App initiated on %s:%d", baseURL, port)
-	app.Listen(baseURL + ":" + port)
+	pis.RegisterPaymentInternalServiceServer(grpcServer, pisServer)
+
+	socket, err := net.Listen("tcp", baseURL+":"+port)
+	if err != nil {
+		log.Fatalf("Failed to listen on %s", baseURL+":"+port)
+	}
+
+	go func() {
+		if err := grpcServer.Serve(socket); err != nil {
+			log.Fatalf("Failed to start grpcServer: %v", err)
+		}
+	}()
+
+	//app := fiber.New()
+	//app.Post("/api/update-payment", api.UpdatePayment(paymentManager))
+
+	//log.Printf("App initiated on %s:%d", baseURL, port)
+	//app.Listen(baseURL + ":" + port)
 }
