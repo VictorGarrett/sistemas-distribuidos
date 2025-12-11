@@ -1,13 +1,11 @@
 package api
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"net/http"
+	"log"
 	"payment-ext-srv/internal"
 	"payment-ext-srv/internal/models"
-	"strings"
+	"payment-ext-srv/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -38,7 +36,10 @@ func HandleNewTransaction(pm *internal.TransactionManager) fiber.Handler {
 	}
 }
 
-func HandleTransactionPay(pm *internal.TransactionManager) fiber.Handler {
+func HandleTransactionPay(
+	pm *internal.TransactionManager,
+	paymentIntSrv *services.PaymentInternalService,
+) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tid, err := uuid.Parse(c.Params("tid"))
 		if err != nil {
@@ -56,13 +57,11 @@ func HandleTransactionPay(pm *internal.TransactionManager) fiber.Handler {
 		}
 
 		fmt.Printf("getting transaction: %s/\n", tid.String())
-		transaction := pm.GetTransaction(tid)
-		fmt.Printf("Posting to callback URL: %s/%s\n", transaction.Callback, tid.String())
-		body, _ := json.Marshal(Payment{
-			Pid: strings.ToLower(tid.String()),
-		})
 
-		http.Post(transaction.Callback, "application/json", bytes.NewReader(body))
+		err = paymentIntSrv.UpdatePayment(tid.String())
+		if err != nil {
+			log.Printf("Waaaaaaa... Failed to update Payment of id %s", tid.String())
+		}
 
 		return c.SendStatus(fiber.StatusOK)
 	}
